@@ -260,7 +260,7 @@
         <section class="finance-composer hidden" id="financeComposer">
           <form id="transactionForm">
             <input id="transactionDescription" type="text" placeholder="Descricao" required />
-            <select id="transactionType"><option value="despesa">Despesa</option><option value="receita">Receita</option></select>
+            <label class="transaction-kind"><input id="transactionType" type="checkbox" checked /> <span>Despesa</span><small>Desmarcado = receita</small></label>
             <input id="transactionAmount" type="number" min="0" step="0.01" placeholder="Valor" required />
             <select id="transactionCategory"></select>
             <select id="transactionAccount"></select>

@@ -326,7 +326,7 @@ function bindEvents() {
     event.preventDefault();
     createFinancialTransaction({
       description: els.transactionDescription.value,
-      type: els.transactionType.value,
+      type: els.transactionType.checked ? "despesa" : "receita",
       amount: els.transactionAmount.value,
       categoryId: els.transactionCategory.value,
       accountId: els.transactionAccount.value,
@@ -337,6 +337,7 @@ function bindEvents() {
       note: els.transactionNote.value
     });
     els.transactionForm.reset();
+    els.transactionType.checked = true;
     els.transactionDate.value = dateOnly(new Date().toISOString());
     state.finance.composerOpen = false;
     saveAndRender();
