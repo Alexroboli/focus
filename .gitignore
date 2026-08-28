@@ -1,1 +1,6 @@
 config.js
+config.server.json
+data.json
+*.tmp
+node_modules/
+

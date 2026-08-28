@@ -1,5 +1,6 @@
-const STORAGE_KEY = "foco-tarefas-mvp";
-const AUTH_KEY = "foco-authenticated";
+const API_STATE = "/api/state";
+const API_LOGIN = "/api/login";
+const API_LOGOUT = "/api/logout";
 
 const seedState = {
   activeFilter: "inbox",
@@ -60,7 +61,8 @@ const seedState = {
   activity: []
 };
 
-let state = loadState();
+let state = structuredClone(seedState);
+let saveTimer = null;
 
 const els = {
   authScreen: document.querySelector("#authScreen"),
@@ -100,31 +102,42 @@ const els = {
 document.addEventListener("DOMContentLoaded", () => {
   bindAuth();
   bindEvents();
-  refreshAuthState();
-  render();
+  boot();
 });
 
+async function boot() {
+  const loaded = await loadRemoteState();
+  refreshAuthState(loaded);
+  if (loaded) render();
+}
+
 function bindAuth() {
-  els.authForm.addEventListener("submit", (event) => {
+  els.authForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const password = document.querySelector("#passwordInput").value;
-    if (password !== APP_PASSWORD) {
-      els.authError.textContent = "Senha invalida.";
+    const response = await requestJson(API_LOGIN, {
+      method: "POST",
+      body: JSON.stringify({ password })
+    });
+
+    if (!response.ok) {
+      els.authError.textContent = response.message || "Senha invalida.";
       return;
     }
-    sessionStorage.setItem(AUTH_KEY, "true");
+
     els.authError.textContent = "";
-    refreshAuthState();
+    await loadRemoteState();
+    refreshAuthState(true);
+    render();
   });
 
-  els.logoutBtn.addEventListener("click", () => {
-    sessionStorage.removeItem(AUTH_KEY);
-    refreshAuthState();
+  els.logoutBtn.addEventListener("click", async () => {
+    await requestJson(API_LOGOUT, { method: "POST" });
+    refreshAuthState(false);
   });
 }
 
-function refreshAuthState() {
-  const authenticated = sessionStorage.getItem(AUTH_KEY) === "true";
+function refreshAuthState(authenticated) {
   els.authScreen.classList.toggle("hidden", authenticated);
   els.appShell.classList.toggle("locked", !authenticated);
   if (!authenticated) document.querySelector("#passwordInput").focus();
@@ -546,22 +559,51 @@ function updateTask(id, patch, rerenderDetails = true) {
   if (rerenderDetails) renderDetails();
 }
 
-function loadState() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : structuredClone(seedState);
-  } catch {
-    return structuredClone(seedState);
-  }
+async function loadRemoteState() {
+  const response = await requestJson(API_STATE);
+  if (!response.ok) return false;
+  state = normalizeState(response.data);
+  return true;
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(async () => {
+    const response = await requestJson(API_STATE, {
+      method: "PUT",
+      body: JSON.stringify(state)
+    });
+    if (!response.ok && response.status === 401) refreshAuthState(false);
+  }, 250);
 }
 
 function saveAndRender() {
   saveState();
   render();
+}
+
+async function requestJson(url, options = {}) {
+  try {
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      ...options
+    });
+    const data = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, ...data };
+  } catch {
+    return { ok: false, message: "Nao foi possivel conectar ao servidor." };
+  }
+}
+
+function normalizeState(nextState) {
+  return {
+    ...structuredClone(seedState),
+    ...nextState,
+    projects: Array.isArray(nextState?.projects) ? nextState.projects : seedState.projects,
+    tasks: Array.isArray(nextState?.tasks) ? nextState.tasks : seedState.tasks,
+    activity: Array.isArray(nextState?.activity) ? nextState.activity : []
+  };
 }
 
 function logActivity(text) {
@@ -647,6 +689,3 @@ function queueIconRefresh() {
     if (window.lucide) window.lucide.createIcons();
   });
 }
-
-
-
