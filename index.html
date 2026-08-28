@@ -265,9 +265,12 @@
             <select id="transactionCategory"></select>
             <select id="transactionAccount"></select>
             <select id="transactionCard"></select>
-            <input id="transactionDate" type="date" />
-            <input id="transactionDueDate" type="date" />
+            <input id="transactionCompetence" type="month" aria-label="Competencia" />
+            <input id="transactionDate" type="date" aria-label="Data de baixa" />
+            <input id="transactionDueDate" type="date" aria-label="Vencimento" />
             <select id="transactionStatus"><option value="pendente">Pendente</option><option value="pago">Pago</option></select>
+            <select id="transactionRepeat"><option value="single">Unico</option><option value="fixed">Fixo mensal</option><option value="installment">Parcelado</option></select>
+            <input id="transactionInstallments" type="number" min="1" max="480" value="1" placeholder="Parcelas" />
             <input id="transactionNote" type="text" placeholder="Observacao" />
             <button type="submit"><i data-lucide="send"></i>Adicionar</button>
           </form>

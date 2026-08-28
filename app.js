@@ -37,7 +37,9 @@ const FINANCE_CATEGORY_SEEDS = [
 
 const seedFinance = {
   activeView: "overview",
+  activeMonth: monthKey(new Date()),
   composerOpen: false,
+  editingTransactionId: null,
   accounts: [{ id: "fa-carteira", name: "Carteira", type: "Dinheiro", initialBalance: 0, active: true, createdAt: new Date().toISOString() }],
   cards: [],
   categories: FINANCE_CATEGORY_SEEDS,
@@ -164,9 +166,12 @@ const els = {
   transactionCategory: document.querySelector("#transactionCategory"),
   transactionAccount: document.querySelector("#transactionAccount"),
   transactionCard: document.querySelector("#transactionCard"),
+  transactionCompetence: document.querySelector("#transactionCompetence"),
   transactionDate: document.querySelector("#transactionDate"),
   transactionDueDate: document.querySelector("#transactionDueDate"),
   transactionStatus: document.querySelector("#transactionStatus"),
+  transactionRepeat: document.querySelector("#transactionRepeat"),
+  transactionInstallments: document.querySelector("#transactionInstallments"),
   transactionNote: document.querySelector("#transactionNote"),
   financeContent: document.querySelector("#financeContent"),
   countTransactions: document.querySelector("#countTransactions"),
@@ -318,31 +323,25 @@ function bindEvents() {
   els.newTransactionBtn.addEventListener("click", () => {
     state.preferences.activeModule = "finance";
     state.finance.composerOpen = true;
+    state.finance.editingTransactionId = null;
+    resetTransactionForm();
     saveAndRender();
     els.transactionDescription.focus();
   });
 
   els.transactionForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    createFinancialTransaction({
-      description: els.transactionDescription.value,
-      type: els.transactionType.checked ? "despesa" : "receita",
-      amount: els.transactionAmount.value,
-      categoryId: els.transactionCategory.value,
-      accountId: els.transactionAccount.value,
-      cardId: els.transactionCard.value,
-      date: els.transactionDate.value,
-      dueDate: els.transactionDueDate.value,
-      status: els.transactionStatus.value,
-      note: els.transactionNote.value
-    });
-    els.transactionForm.reset();
-    els.transactionType.checked = true;
-    els.transactionDate.value = dateOnly(new Date().toISOString());
+    const input = collectTransactionForm();
+    if (state.finance.editingTransactionId) {
+      updateFinancialTransaction(state.finance.editingTransactionId, input);
+    } else {
+      createFinancialTransaction(input);
+    }
+    resetTransactionForm();
     state.finance.composerOpen = false;
+    state.finance.editingTransactionId = null;
     saveAndRender();
   });
-
   els.financeSearchInput.addEventListener("input", renderFinance);
 
   els.addProjectBtn.addEventListener("click", () => {
@@ -1065,7 +1064,9 @@ function normalizeFinance(finance) {
     ...structuredClone(seedFinance),
     ...source,
     activeView: source.activeView || "overview",
+    activeMonth: source.activeMonth || monthKey(new Date()),
     composerOpen: source.composerOpen === true,
+    editingTransactionId: source.editingTransactionId || null,
     accounts: Array.isArray(source.accounts) ? source.accounts.map(normalizeAccount) : structuredClone(seedFinance.accounts),
     cards: Array.isArray(source.cards) ? source.cards.map(normalizeCard) : [],
     categories: mergeCategories(source.categories),
@@ -1113,6 +1114,12 @@ function normalizeCategory(category) {
 }
 
 function normalizeTransaction(transaction) {
+  const baseDate = dateOnly(transaction.date || transaction.data || new Date().toISOString());
+  const baseDueDate = dateOnly(transaction.dueDate || transaction.vencimento || baseDate);
+  const status = transaction.status === "pago" ? "pago" : "pendente";
+  const repeat = ["single", "fixed", "installment"].includes(transaction.repeat) ? transaction.repeat : "single";
+  const paidAt = status === "pago" ? dateOnly(transaction.paidAt || baseDate) : null;
+
   return {
     id: transaction.id || createId(),
     description: transaction.description || transaction.descricao || "Lancamento",
@@ -1121,12 +1128,18 @@ function normalizeTransaction(transaction) {
     categoryId: transaction.categoryId || "",
     accountId: transaction.accountId || "",
     cardId: transaction.cardId || "",
-    date: transaction.date || transaction.data || dateOnly(new Date().toISOString()),
-    dueDate: transaction.dueDate || transaction.vencimento || transaction.date || dateOnly(new Date().toISOString()),
-    status: transaction.status === "pago" ? "pago" : "pendente",
+    date: baseDate,
+    dueDate: baseDueDate,
+    competenceMonth: transaction.competenceMonth || monthKey(baseDueDate),
+    status,
+    repeat,
+    seriesId: transaction.seriesId || null,
+    installmentNumber: Number(transaction.installmentNumber || 1),
+    installmentTotal: Number(transaction.installmentTotal || 1),
     note: transaction.note || transaction.observacao || "",
     createdAt: transaction.createdAt || new Date().toISOString(),
-    paidAt: transaction.paidAt || (transaction.status === "pago" ? new Date().toISOString() : null)
+    updatedAt: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
+    paidAt
   };
 }
 
@@ -1137,6 +1150,8 @@ function renderFinance() {
   const view = state.finance.activeView || "overview";
   els.financeTitle.textContent = getFinanceViewTitle(view);
   els.financeComposer.classList.toggle("hidden", !state.finance.composerOpen);
+  const submitButton = els.transactionForm?.querySelector("button[type='submit']");
+  if (submitButton) submitButton.innerHTML = state.finance.editingTransactionId ? '<i data-lucide="save"></i>Salvar alteracoes' : '<i data-lucide="send"></i>Adicionar';
   if (view === "overview") renderFinanceOverview();
   if (view === "transactions") renderTransactions();
   if (view === "accounts") renderAccounts();
@@ -1162,24 +1177,41 @@ function renderTransactionOptions() {
   els.transactionCategory.innerHTML = categories.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join("");
   els.transactionAccount.innerHTML = `<option value="">Conta</option>${state.finance.accounts.filter((account) => account.active).map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`).join("")}`;
   els.transactionCard.innerHTML = `<option value="">Cartao</option>${state.finance.cards.filter((card) => card.active).map((card) => `<option value="${card.id}">${escapeHtml(card.name)}</option>`).join("")}`;
-  if (!els.transactionDate.value) els.transactionDate.value = dateOnly(new Date().toISOString());
+  setDefaultTransactionDates(false);
 }
 
 function renderFinanceOverview() {
   const summary = getFinanceSummary();
   els.financeContent.innerHTML = `
+    ${renderMonthControls(summary)}
     <section class="finance-kpis">
       <div class="finance-kpi"><span>Saldo atual</span><strong>${formatCurrency(summary.balance)}</strong></div>
-      <div class="finance-kpi"><span>Receitas do mes</span><strong>${formatCurrency(summary.income)}</strong></div>
-      <div class="finance-kpi"><span>Despesas do mes</span><strong>${formatCurrency(summary.expenses)}</strong></div>
-      <div class="finance-kpi"><span>Resultado</span><strong class="${summary.result >= 0 ? "positive" : "negative"}">${formatCurrency(summary.result)}</strong></div>
+      <div class="finance-kpi"><span>Receitas previstas</span><strong>${formatCurrency(summary.income)}</strong></div>
+      <div class="finance-kpi"><span>Despesas previstas</span><strong>${formatCurrency(summary.expenses)}</strong></div>
+      <div class="finance-kpi"><span>Resultado previsto</span><strong class="${summary.result >= 0 ? "positive" : "negative"}">${formatCurrency(summary.result)}</strong></div>
+      <div class="finance-kpi"><span>Recebido no mes</span><strong>${formatCurrency(summary.paidIncome)}</strong></div>
+      <div class="finance-kpi"><span>Pago no mes</span><strong>${formatCurrency(summary.paidExpenses)}</strong></div>
+      <div class="finance-kpi"><span>Aberto no mes</span><strong>${formatCurrency(Math.max(0, summary.expenses - summary.paidExpenses))}</strong></div>
+      <div class="finance-kpi"><span>Lancamentos</span><strong>${summary.monthTransactions.length}</strong></div>
     </section>
+    <section class="finance-block"><h2>Lancamentos de ${formatMonthLabel(summary.selectedMonth)}</h2>${renderTransactionRows(summary.monthTransactions)}</section>
     <section class="finance-two-col">
       <div class="finance-block"><h2>Proximos pagamentos</h2>${renderTransactionRows(summary.upcoming)}</div>
       <div class="finance-block"><h2>Ultimos lancamentos</h2>${renderTransactionRows(summary.latest)}</div>
     </section>
     ${renderFamilyPanel()}`;
   bindFinanceActions();
+}
+
+function renderMonthControls(summary) {
+  return `
+    <section class="month-toolbar">
+      <button class="icon-button" type="button" data-finance-action="month-prev" aria-label="Mes anterior"><i data-lucide="chevron-left"></i></button>
+      <div><span>Competencia</span><strong>${formatMonthLabel(summary.selectedMonth)}</strong></div>
+      <button class="icon-button" type="button" data-finance-action="month-next" aria-label="Proximo mes"><i data-lucide="chevron-right"></i></button>
+      <input type="month" value="${summary.selectedMonth}" data-finance-action="month-pick" aria-label="Escolher mes" />
+      <button class="secondary-action" type="button" data-finance-action="month-current"><i data-lucide="calendar-days"></i>Mes atual</button>
+    </section>`;
 }
 
 function renderFamilyPanel() {
@@ -1200,8 +1232,10 @@ function renderFamilyPanel() {
       <div class="finance-list">${members}</div>
     </section>`;
 }
+
 function renderTransactions() {
-  els.financeContent.innerHTML = `<section class="finance-block"><h2>Lancamentos</h2>${renderTransactionRows(getFilteredTransactions())}</section>`;
+  const summary = getFinanceSummary();
+  els.financeContent.innerHTML = `${renderMonthControls(summary)}<section class="finance-block"><h2>Lancamentos</h2>${renderTransactionRows(getFilteredTransactions())}</section>`;
   bindFinanceActions();
 }
 
@@ -1269,25 +1303,113 @@ function renderCategories() {
   bindFinanceActions();
 }
 
+function collectTransactionForm() {
+  return {
+    description: els.transactionDescription.value,
+    type: els.transactionType.checked ? "despesa" : "receita",
+    amount: els.transactionAmount.value,
+    categoryId: els.transactionCategory.value,
+    accountId: els.transactionAccount.value,
+    cardId: els.transactionCard.value,
+    competenceMonth: els.transactionCompetence.value,
+    date: els.transactionDate.value,
+    dueDate: els.transactionDueDate.value,
+    status: els.transactionStatus.value,
+    repeat: els.transactionRepeat.value,
+    installments: els.transactionInstallments.value,
+    note: els.transactionNote.value
+  };
+}
+
 function createFinancialTransaction(input) {
-  const transaction = normalizeTransaction({
-    id: createId(),
+  const repeat = input.repeat === "fixed" ? "fixed" : input.repeat === "installment" ? "installment" : "single";
+  const total = repeat === "fixed" ? 24 : repeat === "installment" ? Math.max(1, Math.min(480, Number(input.installments || 1))) : 1;
+  const seriesId = repeat === "single" ? null : createId();
+  const baseCompetence = input.competenceMonth || monthKey(input.dueDate || input.date || new Date());
+  const baseDueDate = input.dueDate || firstDayOfMonth(baseCompetence);
+  const baseDescription = String(input.description || "").trim();
+  const created = [];
+
+  for (let index = 0; index < total; index += 1) {
+    const competenceMonth = addMonths(baseCompetence, index);
+    const dueDate = addMonthsToDate(baseDueDate, index);
+    const label = repeat === "installment" ? ` ${index + 1}/${total}` : "";
+    const isFirst = index === 0;
+    const status = isFirst ? input.status : "pendente";
+    const transaction = normalizeTransaction({
+      id: createId(),
+      description: `${baseDescription}${label}`,
+      type: input.type,
+      amount: input.amount,
+      categoryId: input.categoryId,
+      accountId: input.accountId,
+      cardId: input.cardId,
+      competenceMonth,
+      date: isFirst ? (input.date || dateOnly(new Date().toISOString())) : dueDate,
+      dueDate,
+      status,
+      repeat,
+      seriesId,
+      installmentNumber: repeat === "installment" ? index + 1 : 1,
+      installmentTotal: repeat === "installment" ? total : 1,
+      note: input.note,
+      paidAt: status === "pago" ? (input.date || dateOnly(new Date().toISOString())) : null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    if (transaction.description && transaction.amount > 0) created.push(transaction);
+  }
+
+  state.finance.transactions.unshift(...created);
+  return created[0] || null;
+}
+
+function updateFinancialTransaction(id, input) {
+  const transaction = state.finance.transactions.find((item) => item.id === id);
+  if (!transaction) return null;
+  const next = normalizeTransaction({
+    ...transaction,
     description: String(input.description || "").trim(),
     type: input.type,
     amount: input.amount,
     categoryId: input.categoryId,
     accountId: input.accountId,
     cardId: input.cardId,
-    date: input.date || dateOnly(new Date().toISOString()),
-    dueDate: input.dueDate || input.date || dateOnly(new Date().toISOString()),
+    competenceMonth: input.competenceMonth || monthKey(input.dueDate || input.date || transaction.competenceMonth),
+    date: input.date || transaction.date,
+    dueDate: input.dueDate || transaction.dueDate,
     status: input.status,
     note: input.note,
-    paidAt: input.status === "pago" ? new Date().toISOString() : null,
-    createdAt: new Date().toISOString()
+    paidAt: input.status === "pago" ? (input.date || transaction.paidAt || dateOnly(new Date().toISOString())) : null,
+    updatedAt: new Date().toISOString()
   });
-  if (!transaction.description || transaction.amount <= 0) return null;
-  state.finance.transactions.unshift(transaction);
+  Object.assign(transaction, next);
   return transaction;
+}
+
+function resetTransactionForm() {
+  els.transactionForm.reset();
+  els.transactionType.checked = true;
+  els.transactionInstallments.value = "1";
+  els.transactionRepeat.value = "single";
+  state.finance.editingTransactionId = null;
+  setDefaultTransactionDates(true);
+}
+
+function fillTransactionForm(transaction) {
+  els.transactionDescription.value = transaction.description;
+  els.transactionType.checked = transaction.type !== "receita";
+  els.transactionAmount.value = transaction.amount;
+  els.transactionCategory.value = transaction.categoryId;
+  els.transactionAccount.value = transaction.accountId;
+  els.transactionCard.value = transaction.cardId;
+  els.transactionCompetence.value = transaction.competenceMonth || monthKey(transaction.dueDate || transaction.date);
+  els.transactionDate.value = transaction.paidAt || transaction.date || dateOnly(new Date().toISOString());
+  els.transactionDueDate.value = transaction.dueDate || dateOnly(new Date().toISOString());
+  els.transactionStatus.value = transaction.status;
+  els.transactionRepeat.value = transaction.repeat || "single";
+  els.transactionInstallments.value = transaction.installmentTotal || "1";
+  els.transactionNote.value = transaction.note || "";
 }
 
 function createAccount(input) {
@@ -1309,47 +1431,71 @@ function createCategory(input) {
 }
 
 function getFinanceSummary() {
-  const now = new Date();
-  const month = now.getMonth();
-  const year = now.getFullYear();
-  const transactions = state.finance.transactions;
-  const paid = transactions.filter((item) => item.status === "pago");
-  const income = paid.filter((item) => item.type === "receita" && isSameMonth(item.date, month, year)).reduce((sum, item) => sum + item.amount, 0);
-  const expenses = paid.filter((item) => item.type === "despesa" && isSameMonth(item.date, month, year)).reduce((sum, item) => sum + item.amount, 0);
-  const initial = state.finance.accounts.filter((account) => account.active).reduce((sum, account) => sum + account.initialBalance, 0);
-  const totalIncome = paid.filter((item) => item.type === "receita").reduce((sum, item) => sum + item.amount, 0);
-  const totalExpenses = paid.filter((item) => item.type === "despesa").reduce((sum, item) => sum + item.amount, 0);
+  const selectedMonth = state.finance.activeMonth || monthKey(new Date());
+  const today = dateOnly(new Date().toISOString());
+  const transactions = state.finance.transactions.map(normalizeTransaction);
+  const monthTransactions = transactions.filter((transaction) => transaction.competenceMonth === selectedMonth).sort(compareTransactions);
+  const paidUntilToday = transactions.filter((transaction) => transaction.status === "pago" && (transaction.paidAt || transaction.date) <= today);
+  const paidInMonth = monthTransactions.filter((transaction) => transaction.status === "pago");
+  const upcoming = transactions
+    .filter((transaction) => transaction.status !== "pago" && transaction.dueDate >= today)
+    .sort(compareTransactions)
+    .slice(0, 6);
+  const latest = [...transactions]
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 6);
+  const baseBalance = state.finance.accounts.filter((account) => account.active).reduce((sum, account) => sum + Number(account.initialBalance || 0), 0);
+  const paidIncomeAll = paidUntilToday.filter((transaction) => transaction.type === "receita").reduce((sum, transaction) => sum + transaction.amount, 0);
+  const paidExpensesAll = paidUntilToday.filter((transaction) => transaction.type === "despesa").reduce((sum, transaction) => sum + transaction.amount, 0);
+  const income = monthTransactions.filter((transaction) => transaction.type === "receita").reduce((sum, transaction) => sum + transaction.amount, 0);
+  const expenses = monthTransactions.filter((transaction) => transaction.type === "despesa").reduce((sum, transaction) => sum + transaction.amount, 0);
+  const paidIncome = paidInMonth.filter((transaction) => transaction.type === "receita").reduce((sum, transaction) => sum + transaction.amount, 0);
+  const paidExpenses = paidInMonth.filter((transaction) => transaction.type === "despesa").reduce((sum, transaction) => sum + transaction.amount, 0);
+
   return {
-    balance: initial + totalIncome - totalExpenses,
+    selectedMonth,
+    monthTransactions,
+    upcoming,
+    latest,
+    balance: baseBalance + paidIncomeAll - paidExpensesAll,
     income,
     expenses,
     result: income - expenses,
-    upcoming: transactions.filter((item) => item.type === "despesa" && item.status === "pendente").sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate))).slice(0, 6),
-    latest: transactions.slice(0, 6)
+    paidIncome,
+    paidExpenses
   };
 }
 
 function getFilteredTransactions() {
-  const query = els.financeSearchInput.value.trim().toLowerCase();
-  return state.finance.transactions.filter((item) => {
-    if (!query) return true;
-    return [item.description, item.note, getCategory(item.categoryId)?.name, getPaymentName(item)].join(" ").toLowerCase().includes(query);
-  });
+  const term = normalizeText(els.financeSearchInput.value);
+  const selectedMonth = state.finance.activeMonth || monthKey(new Date());
+  return state.finance.transactions
+    .map(normalizeTransaction)
+    .filter((transaction) => transaction.competenceMonth === selectedMonth)
+    .filter((transaction) => !term || normalizeText(`${transaction.description} ${transaction.note} ${getCategory(transaction.categoryId)?.name || ""}`).includes(term))
+    .sort(compareTransactions);
 }
 
 function renderTransactionRows(transactions) {
-  if (!transactions.length) return `<p class="column-empty">Nenhum lancamento.</p>`;
-  return `<div class="finance-list">${transactions.map((item) => `
-    <div class="finance-row transaction-row">
-      <div>
-        <strong>${escapeHtml(item.description)}</strong>
-        <span>${formatDateOnly(item.date)} - ${escapeHtml(getCategory(item.categoryId)?.name || "Sem categoria")} - ${escapeHtml(getPaymentName(item))}</span>
-      </div>
-      <div class="transaction-side">
-        <b class="${item.type === "receita" ? "positive" : "negative"}">${item.type === "receita" ? "+" : "-"}${formatCurrency(item.amount)}</b>
-        <button class="status-mini ${item.status}" data-finance-action="toggle-transaction" data-id="${item.id}">${item.status === "pago" ? "Pago" : "Pendente"}</button>
-      </div>
-    </div>`).join("")}</div>`;
+  if (!transactions.length) return `<p class="empty-copy">Nenhum lancamento.</p>`;
+  return `<div class="finance-list">${transactions.map((item) => {
+    const category = getCategory(item.categoryId);
+    const repeatLabel = item.repeat === "installment" ? `Parcela ${item.installmentNumber}/${item.installmentTotal}` : item.repeat === "fixed" ? "Fixo mensal" : "Unico";
+    const dateLabel = item.status === "pago" ? `Pago em ${formatDisplayDate(item.paidAt || item.date)}` : `Vence em ${formatDisplayDate(item.dueDate)}`;
+    return `
+      <div class="finance-row">
+        <div>
+          <strong>${escapeHtml(item.description)}</strong>
+          <span>${formatDisplayDate(item.dueDate)} - ${escapeHtml(category?.name || "Sem categoria")} - ${escapeHtml(getPaymentName(item))}</span>
+          <small>${repeatLabel} - Competencia ${formatMonthLabel(item.competenceMonth)} - ${dateLabel}</small>
+        </div>
+        <div class="transaction-actions">
+          <b class="${item.type === "receita" ? "positive" : "negative"}">${item.type === "receita" ? "+" : "-"}${formatCurrency(item.amount)}</b>
+          <button class="icon-button" type="button" data-finance-action="edit-transaction" data-id="${item.id}" aria-label="Editar lancamento"><i data-lucide="pencil"></i></button>
+          <button class="status-mini ${item.status}" type="button" data-finance-action="toggle-transaction" data-id="${item.id}">${item.status === "pago" ? "Pago" : "Pendente"}</button>
+        </div>
+      </div>`;
+  }).join("")}</div>`;
 }
 
 function bindFinanceActions() {
@@ -1368,31 +1514,106 @@ function bindFinanceActions() {
       event.currentTarget.reset();
     });
   }
+document.querySelectorAll('[data-finance-action="month-pick"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      state.finance.activeMonth = input.value || monthKey(new Date());
+      setDefaultTransactionDates(true);
+      saveAndRender();
+    });
+  });
 
-  document.querySelectorAll("[data-finance-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const id = button.dataset.id;
+  document.querySelectorAll("button[data-finance-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
       const action = button.dataset.financeAction;
+      const id = button.dataset.id;
+      if (action === "month-prev") {
+        state.finance.activeMonth = addMonths(state.finance.activeMonth, -1);
+      }
+      if (action === "month-next") {
+        state.finance.activeMonth = addMonths(state.finance.activeMonth, 1);
+      }
+      if (action === "month-current") {
+        state.finance.activeMonth = monthKey(new Date());
+      }
+      if (["month-prev", "month-next", "month-current"].includes(action)) {
+        setDefaultTransactionDates(true);
+      }
+      if (action === "edit-transaction") {
+        const item = state.finance.transactions.find((transaction) => transaction.id === id);
+        if (!item) return;
+        state.finance.composerOpen = true;
+        state.finance.editingTransactionId = item.id;
+        saveAndRender();
+        fillTransactionForm(item);
+        els.transactionDescription.focus();
+        return;
+      }
       if (action === "toggle-transaction") {
         const item = state.finance.transactions.find((transaction) => transaction.id === id);
+        if (!item) return;
         item.status = item.status === "pago" ? "pendente" : "pago";
-        item.paidAt = item.status === "pago" ? new Date().toISOString() : null;
+        item.paidAt = item.status === "pago" ? dateOnly(new Date().toISOString()) : null;
+        item.date = item.status === "pago" ? item.paidAt : item.date;
+        item.updatedAt = new Date().toISOString();
       }
       if (action === "toggle-account") {
         const item = state.finance.accounts.find((account) => account.id === id);
-        item.active = !item.active;
+        if (item) item.active = !item.active;
       }
       if (action === "toggle-card") {
         const item = state.finance.cards.find((card) => card.id === id);
-        item.active = !item.active;
+        if (item) item.active = !item.active;
       }
       if (action === "toggle-category") {
         const item = state.finance.categories.find((category) => category.id === id);
-        item.active = !item.active;
+        if (item) item.active = !item.active;
       }
       saveAndRender();
     });
   });
+}
+
+function setDefaultTransactionDates(force = false) {
+  const today = dateOnly(new Date().toISOString());
+  if (force || !els.transactionCompetence.value) els.transactionCompetence.value = state.finance.activeMonth || monthKey(today);
+  if (force || !els.transactionDate.value) els.transactionDate.value = today;
+  if (force || !els.transactionDueDate.value) els.transactionDueDate.value = today;
+}
+
+function monthKey(value) {
+  if (value instanceof Date) return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
+  const text = String(value || "");
+  if (/^\d{4}-\d{2}$/.test(text)) return text;
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 7);
+  return monthKey(new Date());
+}
+
+function firstDayOfMonth(month) {
+  return `${monthKey(month)}-01`;
+}
+
+function addMonths(month, amount) {
+  const [year, monthNumber] = monthKey(month).split("-").map(Number);
+  const date = new Date(year, monthNumber - 1 + amount, 1);
+  return monthKey(date);
+}
+
+function addMonthsToDate(value, amount) {
+  const source = /^\d{4}-\d{2}-\d{2}/.test(String(value)) ? String(value).slice(0, 10) : dateOnly(new Date().toISOString());
+  const [year, monthNumber, day] = source.split("-").map(Number);
+  const target = new Date(year, monthNumber - 1 + amount, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, lastDay));
+  return dateOnly(target.toISOString());
+}
+
+function formatMonthLabel(month) {
+  const [year, monthNumber] = monthKey(month).split("-").map(Number);
+  return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(year, monthNumber - 1, 1));
+}
+
+function compareTransactions(a, b) {
+  return String(a.dueDate || a.date).localeCompare(String(b.dueDate || b.date));
 }
 
 function getCategory(id) {
@@ -1415,8 +1636,16 @@ function formatCurrency(value) {
 }
 
 function formatDateOnly(value) {
-  if (!value) return "Sem data";
-  return new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`));
+  if (!value) return "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return dateOnly(new Date().toISOString());
+  return date.toISOString().slice(0, 10);
 }
 
-
+function formatDisplayDate(value) {
+  if (!value) return "Sem data";
+  return new Intl.DateTimeFormat("pt-BR").format(new Date(`${formatDateOnly(value)}T12:00:00`));
+}
