@@ -10,6 +10,7 @@ const DATA_PATH = process.env.FOCUS_DATA_PATH || path.join(ROOT, "data.json");
 const CONFIG_PATH = process.env.FOCUS_CONFIG_PATH || path.join(ROOT, "config.server.json");
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 const MAX_BODY_BYTES = 1024 * 1024;
+const DATA_VERSION = 2;
 
 const sessions = new Map();
 const mimeTypes = new Map([
@@ -75,7 +76,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  ensureDataFile();
   console.log(`Focus rodando em http://localhost:${PORT}`);
 });
 
@@ -86,13 +86,17 @@ async function handleLogin(req, res) {
   }
 
   const body = await readJsonBody(req);
-  const inputHash = sha256(String(body.password || ""));
+  const password = String(body.password || "");
+  const inputHash = sha256(password);
   if (!safeEqual(inputHash, config.passwordHash)) {
     return sendJson(res, 401, { message: "Senha invalida." });
   }
 
+  const dataKey = deriveDataKey(password, config.encryptionSalt || config.passwordHash);
+  migrateDataFileIfNeeded(dataKey);
+
   const token = crypto.randomBytes(32).toString("hex");
-  sessions.set(token, Date.now() + SESSION_TTL_MS);
+  sessions.set(token, { expiresAt: Date.now() + SESSION_TTL_MS, dataKey });
   res.setHeader("Set-Cookie", buildSessionCookie(req, token));
   return sendJson(res, 200, { ok: true });
 }
@@ -105,15 +109,17 @@ function handleLogout(req, res) {
 }
 
 function handleGetState(req, res) {
-  if (!isAuthenticated(req)) return sendJson(res, 401, { message: "Nao autenticado." });
-  return sendJson(res, 200, { ok: true, data: readState() });
+  const session = getSession(req);
+  if (!session) return sendJson(res, 401, { message: "Nao autenticado." });
+  return sendJson(res, 200, { ok: true, data: readState(session.dataKey) });
 }
 
 async function handlePutState(req, res) {
-  if (!isAuthenticated(req)) return sendJson(res, 401, { message: "Nao autenticado." });
+  const session = getSession(req);
+  if (!session) return sendJson(res, 401, { message: "Nao autenticado." });
   const body = await readJsonBody(req);
   const state = normalizeState(body);
-  writeState(state);
+  writeState(state, session.dataKey);
   return sendJson(res, 200, { ok: true });
 }
 
@@ -145,27 +151,79 @@ function isBlockedFile(filePath) {
 
 function loadConfig() {
   if (process.env.FOCUS_PASSWORD_HASH) {
-    return { passwordHash: process.env.FOCUS_PASSWORD_HASH.trim().toLowerCase() };
+    return {
+      passwordHash: process.env.FOCUS_PASSWORD_HASH.trim().toLowerCase(),
+      encryptionSalt: String(process.env.FOCUS_ENCRYPTION_SALT || "").trim()
+    };
   }
 
   if (!fs.existsSync(CONFIG_PATH)) return {};
   const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-  return { passwordHash: String(parsed.passwordHash || "").trim().toLowerCase() };
+  return {
+    passwordHash: String(parsed.passwordHash || "").trim().toLowerCase(),
+    encryptionSalt: String(parsed.encryptionSalt || "").trim()
+  };
 }
 
-function ensureDataFile() {
-  if (!fs.existsSync(DATA_PATH)) writeState(seedState);
+function migrateDataFileIfNeeded(dataKey) {
+  if (!fs.existsSync(DATA_PATH)) {
+    writeState(seedState, dataKey);
+    return;
+  }
+
+  const parsed = JSON.parse(fs.readFileSync(DATA_PATH, "utf8"));
+  if (parsed?.encrypted === true) return;
+  writeState(normalizeState(parsed), dataKey);
 }
 
-function readState() {
-  ensureDataFile();
-  return normalizeState(JSON.parse(fs.readFileSync(DATA_PATH, "utf8")));
+function readState(dataKey) {
+  if (!fs.existsSync(DATA_PATH)) writeState(seedState, dataKey);
+  const parsed = JSON.parse(fs.readFileSync(DATA_PATH, "utf8"));
+  if (parsed?.encrypted !== true) {
+    const state = normalizeState(parsed);
+    writeState(state, dataKey);
+    return state;
+  }
+  return normalizeState(decryptJson(parsed, dataKey));
 }
 
-function writeState(state) {
+function writeState(state, dataKey) {
   const tempPath = `${DATA_PATH}.tmp`;
-  fs.writeFileSync(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  const encrypted = encryptJson(normalizeState(state), dataKey);
+  fs.writeFileSync(tempPath, `${JSON.stringify(encrypted, null, 2)}\n`, "utf8");
   fs.renameSync(tempPath, DATA_PATH);
+}
+
+function encryptJson(value, dataKey) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", dataKey, iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(value), "utf8"),
+    cipher.final()
+  ]);
+  const tag = cipher.getAuthTag();
+  return {
+    encrypted: true,
+    version: DATA_VERSION,
+    algorithm: "aes-256-gcm",
+    iv: iv.toString("base64"),
+    tag: tag.toString("base64"),
+    ciphertext: ciphertext.toString("base64")
+  };
+}
+
+function decryptJson(payload, dataKey) {
+  const iv = Buffer.from(payload.iv, "base64");
+  const tag = Buffer.from(payload.tag, "base64");
+  const ciphertext = Buffer.from(payload.ciphertext, "base64");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", dataKey, iv);
+  decipher.setAuthTag(tag);
+  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+  return JSON.parse(plaintext);
+}
+
+function deriveDataKey(password, salt) {
+  return crypto.scryptSync(password, salt, 32);
 }
 
 function normalizeState(input) {
@@ -178,16 +236,16 @@ function normalizeState(input) {
   };
 }
 
-function isAuthenticated(req) {
+function getSession(req) {
   const token = getSessionToken(req);
-  if (!token) return false;
-  const expiresAt = sessions.get(token);
-  if (!expiresAt || expiresAt < Date.now()) {
+  if (!token) return null;
+  const session = sessions.get(token);
+  if (!session || session.expiresAt < Date.now()) {
     sessions.delete(token);
-    return false;
+    return null;
   }
-  sessions.set(token, Date.now() + SESSION_TTL_MS);
-  return true;
+  session.expiresAt = Date.now() + SESSION_TTL_MS;
+  return session;
 }
 
 function getSessionToken(req) {
