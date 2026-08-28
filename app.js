@@ -31,6 +31,7 @@ const FINANCE_CATEGORY_SEEDS = [
 
 const seedFinance = {
   activeView: "overview",
+  composerOpen: false,
   accounts: [{ id: "fa-carteira", name: "Carteira", type: "Dinheiro", initialBalance: 0, active: true, createdAt: new Date().toISOString() }],
   cards: [],
   categories: FINANCE_CATEGORY_SEEDS,
@@ -220,13 +221,14 @@ function bindEvents() {
   els.financeNavItems.forEach((button) => {
     button.addEventListener("click", () => {
       state.finance.activeView = button.dataset.financeView;
+      state.finance.composerOpen = false;
       saveAndRender();
     });
   });
 
   els.newTransactionBtn.addEventListener("click", () => {
     state.preferences.activeModule = "finance";
-    state.finance.activeView = "transactions";
+    state.finance.composerOpen = true;
     saveAndRender();
     els.transactionDescription.focus();
   });
@@ -247,6 +249,7 @@ function bindEvents() {
     });
     els.transactionForm.reset();
     els.transactionDate.value = dateOnly(new Date().toISOString());
+    state.finance.composerOpen = false;
     saveAndRender();
   });
 
@@ -965,6 +968,7 @@ function normalizeFinance(finance) {
     ...structuredClone(seedFinance),
     ...source,
     activeView: source.activeView || "overview",
+    composerOpen: source.composerOpen === true,
     accounts: Array.isArray(source.accounts) ? source.accounts.map(normalizeAccount) : structuredClone(seedFinance.accounts),
     cards: Array.isArray(source.cards) ? source.cards.map(normalizeCard) : [],
     categories: mergeCategories(source.categories),
@@ -1035,7 +1039,7 @@ function renderFinance() {
   renderTransactionOptions();
   const view = state.finance.activeView || "overview";
   els.financeTitle.textContent = getFinanceViewTitle(view);
-  els.financeComposer.classList.toggle("hidden", view !== "transactions");
+  els.financeComposer.classList.toggle("hidden", !state.finance.composerOpen);
   if (view === "overview") renderFinanceOverview();
   if (view === "transactions") renderTransactions();
   if (view === "accounts") renderAccounts();
