@@ -106,6 +106,11 @@ let saveTimer = null;
 const els = {
   authScreen: document.querySelector("#authScreen"),
   authForm: document.querySelector("#authForm"),
+  setupForm: document.querySelector("#setupForm"),
+  inviteAcceptForm: document.querySelector("#inviteAcceptForm"),
+  recoveryForm: document.querySelector("#recoveryForm"),
+  authModeButtons: document.querySelectorAll("[data-auth-mode]"),
+  authPanels: document.querySelectorAll("[data-auth-panel]"),
   authError: document.querySelector("#authError"),
   appShell: document.querySelector("#appShell"),
   logoutBtn: document.querySelector("#logoutBtn"),
@@ -277,9 +282,14 @@ function refreshAuthState(authenticated) {
 }
 
 function setAuthMode(mode) {
-  els.authModeButtons.forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
-  els.authPanels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.authPanel !== mode));
+  document.querySelectorAll("[data-auth-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.authMode === mode);
+  });
+  document.querySelectorAll("[data-auth-panel]").forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.authPanel !== mode);
+  });
   els.authError.textContent = "";
+  document.querySelector(`[data-auth-panel="${mode}"] input`)?.focus();
 }
 
 function showAuthMessage(message) {
