@@ -107,6 +107,36 @@ Copy-Item C:\focus\data\focus.db C:\focus\data\backups\focus-$(Get-Date -Format 
 
 Para seguranca no servidor, mantenha o Focus em um usuario Windows separado e restrinja a pasta `C:\focus` via permissao NTFS.
 
+
+## Atualizar pelo GitHub no Windows Server
+
+Use o script de deploy do Focus em vez de rodar tudo manualmente.
+
+Pelo PowerShell:
+
+```powershell
+cd C:\focus
+powershell -ExecutionPolicy Bypass -File C:\focus\deploy-focus.ps1
+```
+
+Ou execute o arquivo:
+
+```text
+C:\focus\atualizar-focus.bat
+```
+
+O script faz:
+
+- backup do banco `C:\focus\data\focus.db` antes da atualizacao;
+- `git checkout main`;
+- `git pull origin main`;
+- `npm install --omit=dev`;
+- restart/start do PM2 no processo `focus`;
+- `pm2 save`;
+- teste em `http://localhost:3000/api/setup`.
+
+Ele mantem somente os ultimos 20 backups em `C:\focus\data\backups`.
+
 ## Publicar no Windows Server
 
 1. Instale o Node.js LTS.
