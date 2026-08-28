@@ -1016,9 +1016,29 @@ svg {
   padding: 12px;
 }
 
+
+.field-label,
+.transaction-kind {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-label > span,
+.transaction-kind > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.field-label.wide {
+  grid-column: span 2;
+}
+
 .finance-composer input:not([type="checkbox"]),
 .finance-composer select,
-.transaction-kind,
 .mini-form input,
 .mini-form select {
   min-height: 40px;
@@ -1046,14 +1066,20 @@ svg {
 
 
 .transaction-kind {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  column-gap: 8px;
-  row-gap: 1px;
   cursor: pointer;
 }
 
+.transaction-kind strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+}
 .transaction-kind input {
   width: 18px;
   height: 18px;
@@ -1064,12 +1090,7 @@ svg {
   accent-color: var(--accent);
 }
 
-.transaction-kind span {
-  font-weight: 800;
-}
-
 .transaction-kind small {
-  grid-column: 2;
   color: var(--muted);
   font-size: 11px;
 }
