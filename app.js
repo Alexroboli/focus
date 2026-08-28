@@ -159,7 +159,7 @@ function bindEvents() {
     const name = els.projectName.value.trim();
     if (!name) return;
     const project = {
-      id: crypto.randomUUID(),
+      id: createId(),
       name,
       color: els.projectColor.value
     };
@@ -185,7 +185,7 @@ function bindEvents() {
     const title = els.taskTitle.value.trim();
     if (!title) return;
     const task = {
-      id: crypto.randomUUID(),
+      id: createId(),
       title,
       description: "",
       projectId: els.taskProject.value,
@@ -490,7 +490,7 @@ function renderDetails() {
     const input = form.querySelector("#subtaskTitle");
     const title = input.value.trim();
     if (!title) return;
-    task.subtasks.push({ id: crypto.randomUUID(), title, done: false });
+    task.subtasks.push({ id: createId(), title, done: false });
     input.value = "";
     logActivity(`Subtarefa adicionada em "${task.title}"`);
     saveAndRender();
@@ -607,7 +607,7 @@ function normalizeState(nextState) {
 }
 
 function logActivity(text) {
-  state.activity.unshift({ id: crypto.randomUUID(), text, at: new Date().toISOString() });
+  state.activity.unshift({ id: createId(), text, at: new Date().toISOString() });
   state.activity = state.activity.slice(0, 50);
 }
 
@@ -688,4 +688,16 @@ function queueIconRefresh() {
   requestAnimationFrame(() => {
     if (window.lucide) window.lucide.createIcons();
   });
+}
+function createId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  if (window.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+    return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10, 16).join("")}`;
+  }
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
