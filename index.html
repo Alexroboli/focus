@@ -10,26 +10,54 @@
   </head>
   <body>
     <section class="auth-screen" id="authScreen">
-      <form class="auth-card" id="authForm">
+      <div class="auth-card">
         <div class="brand auth-brand">
           <div class="brand-mark" aria-hidden="true">F</div>
           <div>
             <strong>Focus</strong>
-            <span>acesso protegido</span>
+            <span>acesso familiar protegido</span>
           </div>
         </div>
-        <label>
-          Senha
-          <input id="passwordInput" type="password" placeholder="Digite sua senha" autocomplete="current-password" required />
-        </label>
-        <p class="auth-error" id="authError" role="alert"></p>
-        <button type="submit">
-          <i data-lucide="lock-keyhole"></i>
-          Entrar
-        </button>
-      </form>
-    </section>
 
+        <div class="auth-tabs" aria-label="Acesso Focus">
+          <button class="active" type="button" data-auth-mode="login">Entrar</button>
+          <button type="button" data-auth-mode="setup">Criar familia</button>
+          <button type="button" data-auth-mode="invite">Convite</button>
+          <button type="button" data-auth-mode="recovery">Recuperar</button>
+        </div>
+
+        <form class="auth-panel" id="authForm" data-auth-panel="login">
+          <label>Email<input id="emailInput" type="email" placeholder="voce@email.com" autocomplete="email" required /></label>
+          <label>Senha<input id="passwordInput" type="password" placeholder="Sua senha" autocomplete="current-password" required /></label>
+          <button type="submit"><i data-lucide="lock-keyhole"></i>Entrar</button>
+        </form>
+
+        <form class="auth-panel hidden" id="setupForm" data-auth-panel="setup">
+          <label>Seu nome<input id="setupName" type="text" placeholder="Seu nome" autocomplete="name" required /></label>
+          <label>Email<input id="setupEmail" type="email" placeholder="voce@email.com" autocomplete="email" required /></label>
+          <label>Senha<input id="setupPassword" type="password" placeholder="Minimo 8 caracteres" autocomplete="new-password" required /></label>
+          <label>Nome da familia<input id="tenantName" type="text" placeholder="Ex.: Familia Roboli" /></label>
+          <button type="submit"><i data-lucide="users"></i>Criar acesso</button>
+        </form>
+
+        <form class="auth-panel hidden" id="inviteAcceptForm" data-auth-panel="invite">
+          <label>Seu nome<input id="inviteName" type="text" placeholder="Nome do familiar" autocomplete="name" required /></label>
+          <label>Email<input id="inviteEmail" type="email" placeholder="email convidado" autocomplete="email" required /></label>
+          <label>Senha<input id="invitePassword" type="password" placeholder="Crie sua senha" autocomplete="new-password" required /></label>
+          <label>Codigo do convite<input id="inviteCode" type="text" placeholder="Cole o codigo recebido" required /></label>
+          <button type="submit"><i data-lucide="user-plus"></i>Entrar na familia</button>
+        </form>
+
+        <form class="auth-panel hidden" id="recoveryForm" data-auth-panel="recovery">
+          <label>Email<input id="recoveryEmail" type="email" placeholder="seu email" autocomplete="email" required /></label>
+          <label>Codigo de recuperacao<input id="recoveryCode" type="text" placeholder="Codigo salvo no cadastro" required /></label>
+          <label>Nova senha<input id="newPassword" type="password" placeholder="Minimo 8 caracteres" autocomplete="new-password" required /></label>
+          <button type="submit"><i data-lucide="key-round"></i>Trocar senha</button>
+        </form>
+
+        <p class="auth-error" id="authError" role="alert"></p>
+      </div>
+    </section>
     <div class="app-shell locked" id="appShell">
       <aside class="sidebar" aria-label="Navegacao principal">
         <div class="brand">

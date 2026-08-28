@@ -1,6 +1,12 @@
 const API_STATE = "/api/state";
 const API_LOGIN = "/api/login";
 const API_LOGOUT = "/api/logout";
+const API_SETUP = "/api/setup";
+const API_REGISTER = "/api/register";
+const API_INVITE_ACCEPT = "/api/invites/accept";
+const API_RECOVERY_RESET = "/api/recovery/reset";
+const API_MEMBERS = "/api/members";
+const API_INVITES = "/api/invites";
 
 const STANDARD_STATUSES = [
   { value: "pendente", label: "Pendente" },
@@ -171,43 +177,108 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function boot() {
+  const setup = await requestJson(API_SETUP);
+  if (setup.needsSetup) setAuthMode("setup");
   const loaded = await loadRemoteState();
   refreshAuthState(loaded);
   if (loaded) render();
 }
-
 function bindAuth() {
+  els.authModeButtons.forEach((button) => {
+    button.addEventListener("click", () => setAuthMode(button.dataset.authMode));
+  });
+
   els.authForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const password = document.querySelector("#passwordInput").value;
     const response = await requestJson(API_LOGIN, {
       method: "POST",
-      body: JSON.stringify({ password })
+      body: JSON.stringify({
+        email: document.querySelector("#emailInput").value,
+        password: document.querySelector("#passwordInput").value
+      })
     });
 
-    if (!response.ok) {
-      els.authError.textContent = response.message || "Senha invalida.";
-      return;
-    }
-
-    els.authError.textContent = "";
+    if (!response.ok) return showAuthMessage(response.message || "Email ou senha invalidos.");
     await loadRemoteState();
     refreshAuthState(true);
     render();
   });
 
+  els.setupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const response = await requestJson(API_REGISTER, {
+      method: "POST",
+      body: JSON.stringify({
+        name: document.querySelector("#setupName").value,
+        email: document.querySelector("#setupEmail").value,
+        password: document.querySelector("#setupPassword").value,
+        tenantName: document.querySelector("#tenantName").value
+      })
+    });
+
+    if (!response.ok) return showAuthMessage(response.message || "Nao foi possivel criar o acesso.");
+    showAuthMessage(`Acesso criado. Guarde este codigo de recuperacao: ${response.recoveryCode}`);
+    currentSession = response.session;
+    await loadRemoteState();
+    refreshAuthState(true);
+    render();
+  });
+
+  els.inviteAcceptForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const response = await requestJson(API_INVITE_ACCEPT, {
+      method: "POST",
+      body: JSON.stringify({
+        name: document.querySelector("#inviteName").value,
+        email: document.querySelector("#inviteEmail").value,
+        password: document.querySelector("#invitePassword").value,
+        inviteCode: document.querySelector("#inviteCode").value
+      })
+    });
+
+    if (!response.ok) return showAuthMessage(response.message || "Convite invalido.");
+    showAuthMessage(`Usuario criado. Guarde este codigo de recuperacao: ${response.recoveryCode}`);
+    setAuthMode("login");
+  });
+
+  els.recoveryForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const response = await requestJson(API_RECOVERY_RESET, {
+      method: "POST",
+      body: JSON.stringify({
+        email: document.querySelector("#recoveryEmail").value,
+        recoveryCode: document.querySelector("#recoveryCode").value,
+        newPassword: document.querySelector("#newPassword").value
+      })
+    });
+
+    if (!response.ok) return showAuthMessage(response.message || "Nao foi possivel recuperar a senha.");
+    showAuthMessage(`Senha alterada. Guarde o novo codigo de recuperacao: ${response.recoveryCode}`);
+    setAuthMode("login");
+  });
+
   els.logoutBtn.addEventListener("click", async () => {
     await requestJson(API_LOGOUT, { method: "POST" });
+    currentSession = null;
+    tenantMembers = [];
     refreshAuthState(false);
   });
 }
-
 function refreshAuthState(authenticated) {
   els.authScreen.classList.toggle("hidden", authenticated);
   els.appShell.classList.toggle("locked", !authenticated);
-  if (!authenticated) document.querySelector("#passwordInput").focus();
+  if (!authenticated) document.querySelector("[data-auth-panel]:not(.hidden) input")?.focus();
 }
 
+function setAuthMode(mode) {
+  els.authModeButtons.forEach((button) => button.classList.toggle("active", button.dataset.authMode === mode));
+  els.authPanels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.authPanel !== mode));
+  els.authError.textContent = "";
+}
+
+function showAuthMessage(message) {
+  els.authError.textContent = message;
+}
 function bindEvents() {
   els.quickAddBtn.addEventListener("click", () => els.taskTitle.focus());
 
@@ -730,8 +801,15 @@ function updateTask(id, patch, rerenderDetails = true) {
 async function loadRemoteState() {
   const response = await requestJson(API_STATE);
   if (!response.ok) return false;
+  currentSession = response.session || null;
   state = normalizeState(response.data);
+  await loadMembers();
   return true;
+}
+
+async function loadMembers() {
+  const response = await requestJson(API_MEMBERS);
+  tenantMembers = response.ok && Array.isArray(response.members) ? response.members : [];
 }
 
 function saveState() {
@@ -1080,10 +1158,29 @@ function renderFinanceOverview() {
     <section class="finance-two-col">
       <div class="finance-block"><h2>Proximos pagamentos</h2>${renderTransactionRows(summary.upcoming)}</div>
       <div class="finance-block"><h2>Ultimos lancamentos</h2>${renderTransactionRows(summary.latest)}</div>
-    </section>`;
+    </section>
+    ${renderFamilyPanel()}`;
   bindFinanceActions();
 }
 
+function renderFamilyPanel() {
+  const members = tenantMembers.map((member) => `
+    <div class="finance-row">
+      <div><strong>${escapeHtml(member.name)}</strong><span>${escapeHtml(member.email)} - ${member.role === "owner" ? "Dono" : "Membro"}</span></div>
+    </div>`).join("") || `<p class="empty-copy">Nenhum membro carregado.</p>`;
+  const inviteForm = currentSession?.role === "owner" ? `
+    <form class="mini-form family-invite-form" id="inviteMemberForm">
+      <input name="email" type="email" placeholder="Email do familiar" required />
+      <button type="submit"><i data-lucide="user-plus"></i>Gerar convite</button>
+    </form>
+    <p class="invite-result" id="inviteResult"></p>` : "";
+  return `
+    <section class="finance-block family-panel">
+      <h2>Familia ${currentSession?.tenantName ? `- ${escapeHtml(currentSession.tenantName)}` : ""}</h2>
+      ${inviteForm}
+      <div class="finance-list">${members}</div>
+    </section>`;
+}
 function renderTransactions() {
   els.financeContent.innerHTML = `<section class="finance-block"><h2>Lancamentos</h2>${renderTransactionRows(getFilteredTransactions())}</section>`;
   bindFinanceActions();
@@ -1237,6 +1334,22 @@ function renderTransactionRows(transactions) {
 }
 
 function bindFinanceActions() {
+  const inviteForm = document.querySelector("#inviteMemberForm");
+  if (inviteForm) {
+    inviteForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      const response = await requestJson(API_INVITES, { method: "POST", body: JSON.stringify({ email: data.get("email") }) });
+      const result = document.querySelector("#inviteResult");
+      if (!response.ok) {
+        if (result) result.textContent = response.message || "Nao foi possivel gerar convite.";
+        return;
+      }
+      if (result) result.textContent = `Convite para ${response.invite.email}: ${response.invite.inviteCode}`;
+      event.currentTarget.reset();
+    });
+  }
+
   document.querySelectorAll("[data-finance-action]").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.dataset.id;

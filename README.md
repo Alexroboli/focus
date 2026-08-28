@@ -1,14 +1,12 @@
 # Focus
 
-Focus e uma aplicacao pessoal para organizar rotina e financas em um unico lugar, sem virar um ERP pessoal.
+Focus e uma aplicacao pessoal para organizar rotina e financas em um unico lugar, com acesso familiar protegido.
 
 Conceito do produto: **Focus em voce.**
 
 ## Ambientes
 
 ### Minha Rotina
-
-Mantem o controle de tarefas existente:
 
 - Entrada, Hoje, Proximas e Concluidas
 - Projetos
@@ -22,8 +20,6 @@ Mantem o controle de tarefas existente:
 
 ### Minhas Financas
 
-Controle financeiro pessoal simples:
-
 - Visao geral financeira
 - Saldo consolidado das contas
 - Receitas, despesas e resultado do mes
@@ -33,27 +29,27 @@ Controle financeiro pessoal simples:
 - Contas
 - Cartoes
 - Categorias
+- Familia: membros vinculados ao mesmo controle financeiro
+- Convite por email com codigo para criar usuario familiar
 
 Nao ha integracao bancaria, Open Finance, OFX ou APIs externas financeiras.
 
 ## Arquitetura
 
-A arquitetura continua simples:
-
 - Node.js puro
-- HTML
-- CSS
-- JavaScript
-- `data.json`
-- AES-256-GCM
+- HTML, CSS e JavaScript
+- SQLite em `C:\focus\data\focus.db`
+- Tenant/familia com usuarios vinculados
+- Senhas com hash `scrypt` e salt individual
+- Codigo de recuperacao de senha por usuario
 - Sessao via cookie HttpOnly
-- Sem banco de dados externo
 - Sem React/Next.js/framework
 
 ## Como rodar localmente
 
 ```powershell
 cd C:\focus
+npm install
 node server.js
 ```
 
@@ -63,56 +59,77 @@ Depois acesse:
 http://localhost:3000
 ```
 
-## Senha e privacidade dos dados
+No primeiro acesso, use **Criar familia**. Esse cadastro cria:
 
-A senha nao fica no frontend. O servidor le o hash SHA-256 em `config.server.json` ou na variavel de ambiente `FOCUS_PASSWORD_HASH`.
+- o primeiro usuario dono;
+- o tenant/familia;
+- o arquivo SQLite em `C:\focus\data\focus.db`.
 
-O arquivo `data.json` fica criptografado com AES-256-GCM. A chave de criptografia e derivada da senha, entao abrir o arquivo direto no servidor mostra apenas dados cifrados.
+Guarde o codigo de recuperacao mostrado no cadastro. Ele e necessario para trocar a senha sem e-mail automatico.
 
-Para isolamento melhor no Windows Server, rode o Focus em um usuario do Windows separado e restrinja a pasta `C:\focus` via permissao NTFS.
+## Usuarios e familia
 
-## Estrutura do state
+O dono da familia pode gerar convites em **Minhas Financas > Visao geral > Familia**.
 
-A estrutura atual suporta dados antigos e novos:
+Fluxo:
 
-```json
-{
-  "tasks": [],
-  "projects": [],
-  "activity": [],
-  "preferences": {
-    "activeModule": "routine"
-  },
-  "finance": {
-    "activeView": "overview",
-    "accounts": [],
-    "cards": [],
-    "categories": [],
-    "transactions": []
-  }
-}
+1. Informe o email do familiar.
+2. O Focus gera um codigo de convite.
+3. A pessoa abre o Focus, entra na aba **Convite**, informa nome, email, senha e codigo.
+4. Ela passa a enxergar os mesmos dados do tenant/familia.
+
+Todos os usuarios vinculados ao mesmo tenant compartilham tarefas, contas, cartoes, categorias e lancamentos.
+
+## Recuperacao de senha
+
+Como o app nao envia email ainda, a recuperacao usa codigo de recuperacao.
+
+1. No cadastro, guarde o codigo exibido.
+2. Para trocar a senha, abra a aba **Recuperar**.
+3. Informe email, codigo de recuperacao e nova senha.
+4. O app gera um novo codigo; guarde o novo e descarte o antigo.
+
+## Dados e backup
+
+O banco fica em:
+
+```text
+C:\focus\data\focus.db
 ```
 
-## Compatibilidade
+Essa pasta esta no `.gitignore` e nao vai para o GitHub.
 
-Arquivos `data.json` antigos continuam compativeis. Ao carregar dados antigos, o frontend normaliza o state adicionando `preferences` e `finance`, sem apagar tarefas, projetos, subtarefas, links, status Dev ou historico existente.
+Backup recomendado no Windows Server:
+
+```powershell
+Copy-Item C:\focus\data\focus.db C:\focus\data\backups\focus-$(Get-Date -Format yyyyMMdd-HHmmss).db
+```
+
+Para seguranca no servidor, mantenha o Focus em um usuario Windows separado e restrinja a pasta `C:\focus` via permissao NTFS.
 
 ## Publicar no Windows Server
 
 1. Instale o Node.js LTS.
-2. Copie a pasta do projeto para `C:\focus`.
-3. Crie `C:\focus\config.server.json` com `passwordHash` e `encryptionSalt`.
-4. Rode `node server.js` para testar.
-5. Use PM2 para manter em execucao.
-6. Libere a porta ou configure IIS como proxy reverso.
-7. Use HTTPS ao expor para internet.
+2. Copie ou atualize o projeto em `C:\focus`.
+3. Rode:
+
+```powershell
+cd C:\focus
+npm install
+pm2 restart focus
+```
+
+4. Libere a porta ou configure IIS como proxy reverso.
+5. Use HTTPS ao expor para internet.
+
+## Compatibilidade
+
+O `data.json` antigo nao e mais usado como banco principal. Ele pode ficar como arquivo legado/backup. Os novos dados ficam no SQLite.
 
 ## Proximos passos
 
-- Instalar proxy reverso no IIS com HTTPS
-- Backup automatico do `data.json`
-- Assistente pessoal
-- Comandos em linguagem natural
-- Entrada por voz
-- Notificacoes
-- Tarefas recorrentes
+- Backup automatico agendado do `focus.db`
+- Envio real de email para convite e recuperacao
+- Permissoes por papel alem de dono/membro
+- Auditoria de quem criou ou alterou lancamentos
+- IIS com HTTPS como proxy reverso

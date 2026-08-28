@@ -52,6 +52,60 @@ button {
     var(--bg);
 }
 
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.auth-tabs button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-tabs button.active,
+.auth-tabs button:hover {
+  background: var(--ink);
+  color: #fff;
+}
+
+.auth-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-panel.hidden {
+  display: none;
+}
+
+.family-panel {
+  align-self: start;
+}
+
+.family-invite-form {
+  grid-template-columns: minmax(220px, 1fr) auto;
+}
+
+.invite-result {
+  margin: 0;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.empty-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .auth-screen.hidden {
   display: none;
 }
@@ -1139,4 +1193,19 @@ svg {
   .transaction-side {
     justify-items: start;
   }
+}
+
+.auth-card .auth-tabs button {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-card .auth-tabs button.active,
+.auth-card .auth-tabs button:hover {
+  background: var(--ink);
+  color: #fff;
 }

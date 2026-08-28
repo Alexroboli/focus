@@ -3,14 +3,22 @@ const fs = require("fs");
 const http = require("http");
 const path = require("path");
 const { URL } = require("url");
+const {
+  hasUsers,
+  createInitialAccount,
+  authenticateUser,
+  createInvite,
+  acceptInvite,
+  resetPasswordWithRecovery,
+  listMembers,
+  readTenantState,
+  writeTenantState
+} = require("./database");
 
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT || 3000);
-const DATA_PATH = process.env.FOCUS_DATA_PATH || path.join(ROOT, "data.json");
-const CONFIG_PATH = process.env.FOCUS_CONFIG_PATH || path.join(ROOT, "config.server.json");
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 const MAX_BODY_BYTES = 1024 * 1024;
-const DATA_VERSION = 2;
 
 const sessions = new Map();
 const mimeTypes = new Map([
@@ -25,45 +33,21 @@ const mimeTypes = new Map([
   [".ico", "image/x-icon"]
 ]);
 
-const seedState = {
-  activeFilter: "inbox",
-  activeProjectId: null,
-  statusFilter: "all",
-  priorityFilter: null,
-  view: "list",
-  selectedTaskId: "t1",
-  projects: [
-    { id: "p1", name: "Pessoal", color: "#d94f35" },
-    { id: "p2", name: "Trabalho", color: "#376da8" },
-    { id: "p3", name: "Estudos", color: "#2f7d6b" }
-  ],
-  tasks: [
-    {
-      id: "t1",
-      title: "Organizar tarefas da semana",
-      description: "Definir prioridades, prazos e tarefas recorrentes.",
-      projectId: "p1",
-      priority: "alta",
-      status: "andamento",
-      due: new Date().toISOString(),
-      labels: ["planejamento"],
-      completedAt: null,
-      createdAt: new Date().toISOString(),
-      subtasks: [
-        { id: "s1", title: "Revisar pendencias", done: true },
-        { id: "s2", title: "Definir 3 prioridades", done: false }
-      ]
-    }
-  ],
-  activity: []
-};
+const seedState = null;
 
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
 
+    if (url.pathname === "/api/setup" && req.method === "GET") return handleSetup(req, res);
+    if (url.pathname === "/api/register" && req.method === "POST") return handleRegister(req, res);
+    if (url.pathname === "/api/invites/accept" && req.method === "POST") return handleAcceptInvite(req, res);
+    if (url.pathname === "/api/recovery/reset" && req.method === "POST") return handleRecoveryReset(req, res);
     if (url.pathname === "/api/login" && req.method === "POST") return handleLogin(req, res);
     if (url.pathname === "/api/logout" && req.method === "POST") return handleLogout(req, res);
+    if (url.pathname === "/api/session" && req.method === "GET") return handleSession(req, res);
+    if (url.pathname === "/api/members" && req.method === "GET") return handleMembers(req, res);
+    if (url.pathname === "/api/invites" && req.method === "POST") return handleCreateInvite(req, res);
     if (url.pathname === "/api/state" && req.method === "GET") return handleGetState(req, res);
     if (url.pathname === "/api/state" && req.method === "PUT") return handlePutState(req, res);
     if (url.pathname.startsWith("/api/")) return sendJson(res, 404, { message: "Rota nao encontrada." });
@@ -71,7 +55,7 @@ const server = http.createServer(async (req, res) => {
     return serveStatic(url.pathname, res);
   } catch (error) {
     console.error(error);
-    return sendJson(res, 500, { message: "Erro interno do servidor." });
+    return sendJson(res, error.statusCode || 500, { message: error.statusCode ? error.message : "Erro interno do servidor." });
   }
 });
 
@@ -79,26 +63,58 @@ server.listen(PORT, () => {
   console.log(`Focus rodando em http://localhost:${PORT}`);
 });
 
-async function handleLogin(req, res) {
-  const config = loadConfig();
-  if (!config.passwordHash) {
-    return sendJson(res, 500, { message: "Senha do servidor nao configurada." });
-  }
+async function handleSetup(req, res) {
+  return sendJson(res, 200, { ok: true, needsSetup: !(await hasUsers()) });
+}
 
+async function handleRegister(req, res) {
+  if (await hasUsers()) return sendJson(res, 409, { message: "Cadastro inicial ja foi criado. Use um convite para adicionar familiares." });
   const body = await readJsonBody(req);
-  const password = String(body.password || "");
-  const inputHash = sha256(password);
-  if (!safeEqual(inputHash, config.passwordHash)) {
-    return sendJson(res, 401, { message: "Senha invalida." });
+  validateNameEmailPassword(body);
+  const result = await createInitialAccount({
+    name: body.name,
+    email: body.email,
+    password: body.password,
+    tenantName: body.tenantName || "Familia"
+  });
+  const session = {
+    userId: result.user.id,
+    email: result.user.email,
+    name: result.user.name,
+    tenantId: result.tenant.id,
+    tenantName: result.tenant.name,
+    role: "owner"
+  };
+  setSession(req, res, session);
+  return sendJson(res, 201, { ok: true, session, recoveryCode: result.recoveryCode });
+}
+
+async function handleAcceptInvite(req, res) {
+  const body = await readJsonBody(req);
+  validateNameEmailPassword(body);
+  if (!body.inviteCode) return sendJson(res, 400, { message: "Informe o codigo do convite." });
+  const result = await acceptInvite(body);
+  if (!result) return sendJson(res, 400, { message: "Convite invalido ou expirado." });
+  return sendJson(res, 201, { ok: true, recoveryCode: result.recoveryCode });
+}
+
+async function handleRecoveryReset(req, res) {
+  const body = await readJsonBody(req);
+  if (!body.email || !body.recoveryCode || !body.newPassword || String(body.newPassword).length < 8) {
+    return sendJson(res, 400, { message: "Informe email, codigo de recuperacao e nova senha com pelo menos 8 caracteres." });
   }
+  const result = await resetPasswordWithRecovery(body);
+  if (!result) return sendJson(res, 401, { message: "Codigo de recuperacao invalido." });
+  return sendJson(res, 200, { ok: true, recoveryCode: result.recoveryCode });
+}
 
-  const dataKey = deriveDataKey(password, config.encryptionSalt || config.passwordHash);
-  migrateDataFileIfNeeded(dataKey);
-
-  const token = crypto.randomBytes(32).toString("hex");
-  sessions.set(token, { expiresAt: Date.now() + SESSION_TTL_MS, dataKey });
-  res.setHeader("Set-Cookie", buildSessionCookie(req, token));
-  return sendJson(res, 200, { ok: true });
+async function handleLogin(req, res) {
+  const body = await readJsonBody(req);
+  if (!body.email || !body.password) return sendJson(res, 400, { message: "Informe email e senha." });
+  const session = await authenticateUser(body.email, body.password);
+  if (!session) return sendJson(res, 401, { message: "Email ou senha invalidos." });
+  setSession(req, res, session);
+  return sendJson(res, 200, { ok: true, session });
 }
 
 function handleLogout(req, res) {
@@ -108,18 +124,39 @@ function handleLogout(req, res) {
   return sendJson(res, 200, { ok: true });
 }
 
-function handleGetState(req, res) {
+function handleSession(req, res) {
   const session = getSession(req);
   if (!session) return sendJson(res, 401, { message: "Nao autenticado." });
-  return sendJson(res, 200, { ok: true, data: readState(session.dataKey) });
+  return sendJson(res, 200, { ok: true, session });
+}
+
+async function handleMembers(req, res) {
+  const session = getSession(req);
+  if (!session) return sendJson(res, 401, { message: "Nao autenticado." });
+  return sendJson(res, 200, { ok: true, members: await listMembers(session) });
+}
+
+async function handleCreateInvite(req, res) {
+  const session = getSession(req);
+  if (!session) return sendJson(res, 401, { message: "Nao autenticado." });
+  const body = await readJsonBody(req);
+  if (!body.email) return sendJson(res, 400, { message: "Informe o email do familiar." });
+  const invite = await createInvite(session, body.email);
+  return sendJson(res, 201, { ok: true, invite });
+}
+
+async function handleGetState(req, res) {
+  const session = getSession(req);
+  if (!session) return sendJson(res, 401, { message: "Nao autenticado." });
+  const data = await readTenantState(session, seedState);
+  return sendJson(res, 200, { ok: true, data, session });
 }
 
 async function handlePutState(req, res) {
   const session = getSession(req);
   if (!session) return sendJson(res, 401, { message: "Nao autenticado." });
-  const body = await readJsonBody(req);
-  const state = normalizeState(body);
-  writeState(state, session.dataKey);
+  const state = await readJsonBody(req);
+  await writeTenantState(session, state);
   return sendJson(res, 200, { ok: true });
 }
 
@@ -141,99 +178,34 @@ function serveStatic(requestPath, res) {
 
 function isBlockedFile(filePath) {
   const name = path.basename(filePath).toLowerCase();
+  const relative = path.relative(ROOT, filePath).toLowerCase();
   return name.startsWith(".") ||
     name === "server.js" ||
+    name === "database.js" ||
     name === "data.json" ||
+    name.endsWith(".db") ||
+    name.endsWith(".sqlite") ||
     name === "config.server.json" ||
     name === "package.json" ||
-    filePath.toLowerCase().includes(`${path.sep}.git${path.sep}`);
+    relative.startsWith(`data${path.sep}`) ||
+    relative.includes(`${path.sep}.git${path.sep}`) ||
+    relative.includes(`${path.sep}node_modules${path.sep}`);
 }
 
-function loadConfig() {
-  if (process.env.FOCUS_PASSWORD_HASH) {
-    return {
-      passwordHash: process.env.FOCUS_PASSWORD_HASH.trim().toLowerCase(),
-      encryptionSalt: String(process.env.FOCUS_ENCRYPTION_SALT || "").trim()
-    };
-  }
-
-  if (!fs.existsSync(CONFIG_PATH)) return {};
-  const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-  return {
-    passwordHash: String(parsed.passwordHash || "").trim().toLowerCase(),
-    encryptionSalt: String(parsed.encryptionSalt || "").trim()
-  };
+function validateNameEmailPassword(body) {
+  if (!body.name || String(body.name).trim().length < 2) throwBadRequest("Informe o nome.");
+  if (!body.email || !String(body.email).includes("@")) throwBadRequest("Informe um email valido.");
+  if (!body.password || String(body.password).length < 8) throwBadRequest("A senha precisa ter pelo menos 8 caracteres.");
 }
 
-function migrateDataFileIfNeeded(dataKey) {
-  if (!fs.existsSync(DATA_PATH)) {
-    writeState(seedState, dataKey);
-    return;
-  }
-
-  const parsed = JSON.parse(fs.readFileSync(DATA_PATH, "utf8"));
-  if (parsed?.encrypted === true) return;
-  writeState(normalizeState(parsed), dataKey);
+function throwBadRequest(message) {
+  throw Object.assign(new Error(message), { statusCode: 400 });
 }
 
-function readState(dataKey) {
-  if (!fs.existsSync(DATA_PATH)) writeState(seedState, dataKey);
-  const parsed = JSON.parse(fs.readFileSync(DATA_PATH, "utf8"));
-  if (parsed?.encrypted !== true) {
-    const state = normalizeState(parsed);
-    writeState(state, dataKey);
-    return state;
-  }
-  return normalizeState(decryptJson(parsed, dataKey));
-}
-
-function writeState(state, dataKey) {
-  const tempPath = `${DATA_PATH}.tmp`;
-  const encrypted = encryptJson(normalizeState(state), dataKey);
-  fs.writeFileSync(tempPath, `${JSON.stringify(encrypted, null, 2)}\n`, "utf8");
-  fs.renameSync(tempPath, DATA_PATH);
-}
-
-function encryptJson(value, dataKey) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", dataKey, iv);
-  const ciphertext = Buffer.concat([
-    cipher.update(JSON.stringify(value), "utf8"),
-    cipher.final()
-  ]);
-  const tag = cipher.getAuthTag();
-  return {
-    encrypted: true,
-    version: DATA_VERSION,
-    algorithm: "aes-256-gcm",
-    iv: iv.toString("base64"),
-    tag: tag.toString("base64"),
-    ciphertext: ciphertext.toString("base64")
-  };
-}
-
-function decryptJson(payload, dataKey) {
-  const iv = Buffer.from(payload.iv, "base64");
-  const tag = Buffer.from(payload.tag, "base64");
-  const ciphertext = Buffer.from(payload.ciphertext, "base64");
-  const decipher = crypto.createDecipheriv("aes-256-gcm", dataKey, iv);
-  decipher.setAuthTag(tag);
-  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-  return JSON.parse(plaintext);
-}
-
-function deriveDataKey(password, salt) {
-  return crypto.scryptSync(password, salt, 32);
-}
-
-function normalizeState(input) {
-  return {
-    ...seedState,
-    ...(input && typeof input === "object" ? input : {}),
-    projects: Array.isArray(input?.projects) ? input.projects : seedState.projects,
-    tasks: Array.isArray(input?.tasks) ? input.tasks : seedState.tasks,
-    activity: Array.isArray(input?.activity) ? input.activity : []
-  };
+function setSession(req, res, session) {
+  const token = crypto.randomBytes(32).toString("hex");
+  sessions.set(token, { ...session, expiresAt: Date.now() + SESSION_TTL_MS });
+  res.setHeader("Set-Cookie", buildSessionCookie(req, token));
 }
 
 function getSession(req) {
@@ -285,16 +257,6 @@ function readJsonBody(req) {
     });
     req.on("error", reject);
   });
-}
-
-function sha256(value) {
-  return crypto.createHash("sha256").update(value).digest("hex");
-}
-
-function safeEqual(a, b) {
-  const first = Buffer.from(String(a), "hex");
-  const second = Buffer.from(String(b), "hex");
-  return first.length === second.length && crypto.timingSafeEqual(first, second);
 }
 
 function sendJson(res, status, payload) {
