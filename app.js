@@ -184,6 +184,12 @@ async function boot() {
   if (loaded) render();
 }
 function bindAuth() {
+  els.authScreen.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-auth-mode]");
+    if (!button) return;
+    setAuthMode(button.dataset.authMode);
+  });
+
   els.authModeButtons.forEach((button) => {
     button.addEventListener("click", () => setAuthMode(button.dataset.authMode));
   });
@@ -279,6 +285,8 @@ function setAuthMode(mode) {
 function showAuthMessage(message) {
   els.authError.textContent = message;
 }
+window.setAuthMode = setAuthMode;
+
 function bindEvents() {
   els.quickAddBtn.addEventListener("click", () => els.taskTitle.focus());
 

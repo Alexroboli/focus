@@ -20,10 +20,10 @@
         </div>
 
         <div class="auth-tabs" aria-label="Acesso Focus">
-          <button class="active" type="button" data-auth-mode="login">Entrar</button>
-          <button type="button" data-auth-mode="setup">Criar familia</button>
-          <button type="button" data-auth-mode="invite">Convite</button>
-          <button type="button" data-auth-mode="recovery">Recuperar</button>
+          <button class="active" type="button" data-auth-mode="login" onclick="setAuthMode('login')">Entrar</button>
+          <button type="button" data-auth-mode="setup" onclick="setAuthMode('setup')">Criar familia</button>
+          <button type="button" data-auth-mode="invite" onclick="setAuthMode('invite')">Convite</button>
+          <button type="button" data-auth-mode="recovery" onclick="setAuthMode('recovery')">Recuperar</button>
         </div>
 
         <form class="auth-panel" id="authForm" data-auth-panel="login">
