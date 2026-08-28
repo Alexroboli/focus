@@ -58,9 +58,9 @@ const seedState = {
   preferences: { activeModule: "routine" },
   finance: structuredClone(seedFinance),
   projects: [
-    { id: "p1", name: "Pessoal", color: "#d94f35" },
-    { id: "p2", name: "Trabalho", color: "#376da8" },
-    { id: "p3", name: "Estudos", color: "#2f7d6b" }
+    { id: "p1", name: "Pessoal", color: "#27865f" },
+    { id: "p2", name: "Trabalho", color: "#2f6f87" },
+    { id: "p3", name: "Estudos", color: "#6f8f3f" }
   ],
   tasks: [
     {
