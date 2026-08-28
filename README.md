@@ -64,11 +64,11 @@ As tarefas ficam salvas em `data.json`, criado automaticamente no servidor. Esse
 - Etiquetas
 - Subtarefas
 - Busca
-- Filtros por entrada, hoje, proximas e concluidas
-- Visualizacao em lista e painel
+- Filtros por entrada, hoje, proximas, concluidas, prioridade, Dev e periodo de datas
+- Visualizacao em lista, painel e agrupamento por data expansivel
 - Login com cookie de sessao HttpOnly
 - Persistencia compartilhada no servidor
-- `data.json` criptografado no disco
+- `data.json` criptografado no disco`r`n- Nicho Dev com status: Analise, Em progresso, Dev teste, SDX teste, Producao e Finalizado`r`n- Links por tarefa para Datadog, ClickUp e outros sistemas
 
 ## Proximos passos naturais
 
@@ -78,3 +78,4 @@ As tarefas ficam salvas em `data.json`, criado automaticamente no servidor. Esse
 - Backup automatico do `data.json`
 - Tarefas recorrentes
 - Lembretes por e-mail ou notificacao
+
