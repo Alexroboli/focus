@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Foco - Controle de Tarefas</title>
+    <title>Focus</title>
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
     <script src="./app.js" defer></script>
@@ -14,7 +14,7 @@
         <div class="brand auth-brand">
           <div class="brand-mark" aria-hidden="true">F</div>
           <div>
-            <strong>Foco</strong>
+            <strong>Focus</strong>
             <span>acesso protegido</span>
           </div>
         </div>
@@ -35,15 +35,43 @@
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">F</div>
           <div>
-            <strong>Foco</strong>
-            <span>tarefas e projetos</span>
+            <strong>Focus</strong>
+            <span>Focus em voce.</span>
           </div>
         </div>
 
+        <div class="module-switch" aria-label="Ambientes do Focus">
+          <button class="module-option active" type="button" data-module="routine">
+            <i data-lucide="list-checks"></i>
+            Minha Rotina
+          </button>
+          <button class="module-option" type="button" data-module="finance">
+            <i data-lucide="wallet"></i>
+            Minhas Financas
+          </button>
+        </div>
+
+        <div class="routine-sidebar" id="routineSidebar">
         <button class="primary-action" id="quickAddBtn" type="button">
           <i data-lucide="plus"></i>
           Nova tarefa
         </button>
+        </div>
+
+        <div class="finance-sidebar hidden" id="financeSidebar">
+          <button class="primary-action" id="newTransactionBtn" type="button">
+            <i data-lucide="plus"></i>
+            Novo lancamento
+          </button>
+          <nav class="nav-stack" aria-label="Menus financeiros">
+            <button class="nav-item active" type="button" data-finance-view="overview"><i data-lucide="layout-dashboard"></i><span>Visao geral</span><b></b></button>
+            <button class="nav-item" type="button" data-finance-view="transactions"><i data-lucide="receipt-text"></i><span>Lancamentos</span><b id="countTransactions">0</b></button>
+            <button class="nav-item" type="button" data-finance-view="accounts"><i data-lucide="landmark"></i><span>Contas</span><b id="countAccounts">0</b></button>
+            <button class="nav-item" type="button" data-finance-view="cards"><i data-lucide="credit-card"></i><span>Cartoes</span><b id="countCards">0</b></button>
+            <button class="nav-item" type="button" data-finance-view="categories"><i data-lucide="tags"></i><span>Categorias</span><b id="countCategories">0</b></button>
+          </nav>
+        </div>
+
         <button class="secondary-action" id="logoutBtn" type="button">
           <i data-lucide="log-out"></i>
           Sair
@@ -91,7 +119,7 @@
         </div>
       </aside>
 
-      <main class="workspace">
+      <main class="workspace routine-workspace" id="routineWorkspace">
         <header class="topbar">
           <div>
             <p class="eyebrow" id="viewEyebrow">Entrada</p>
@@ -188,6 +216,39 @@
       </main>
     </div>
 
+
+      <main class="workspace finance-workspace hidden" id="financeWorkspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Minhas Financas</p>
+            <h1 id="financeTitle">Visao geral</h1>
+          </div>
+          <div class="topbar-actions">
+            <div class="searchbox">
+              <i data-lucide="search"></i>
+              <input id="financeSearchInput" type="search" placeholder="Buscar lancamentos" />
+            </div>
+          </div>
+        </header>
+
+        <section class="finance-composer" id="financeComposer">
+          <form id="transactionForm">
+            <input id="transactionDescription" type="text" placeholder="Descricao" required />
+            <select id="transactionType"><option value="despesa">Despesa</option><option value="receita">Receita</option></select>
+            <input id="transactionAmount" type="number" min="0" step="0.01" placeholder="Valor" required />
+            <select id="transactionCategory"></select>
+            <select id="transactionAccount"></select>
+            <select id="transactionCard"></select>
+            <input id="transactionDate" type="date" />
+            <input id="transactionDueDate" type="date" />
+            <select id="transactionStatus"><option value="pendente">Pendente</option><option value="pago">Pago</option></select>
+            <input id="transactionNote" type="text" placeholder="Observacao" />
+            <button type="submit"><i data-lucide="send"></i>Adicionar</button>
+          </form>
+        </section>
+
+        <section class="finance-content" id="financeContent"></section>
+      </main>
     <dialog id="projectDialog">
       <form method="dialog" id="projectForm">
         <header>
@@ -212,3 +273,5 @@
     </dialog>
   </body>
 </html>
+
+

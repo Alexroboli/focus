@@ -17,6 +17,26 @@ const DEV_STATUSES = [
   { value: "finalizado", label: "Finalizado" }
 ];
 
+const FINANCE_CATEGORY_SEEDS = [
+  { id: "fc-alimentacao", name: "Alimentacao", type: "despesa", active: true },
+  { id: "fc-moradia", name: "Moradia", type: "despesa", active: true },
+  { id: "fc-transporte", name: "Transporte", type: "despesa", active: true },
+  { id: "fc-saude", name: "Saude", type: "despesa", active: true },
+  { id: "fc-educacao", name: "Educacao", type: "despesa", active: true },
+  { id: "fc-lazer", name: "Lazer", type: "despesa", active: true },
+  { id: "fc-assinaturas", name: "Assinaturas", type: "despesa", active: true },
+  { id: "fc-salario", name: "Salario", type: "receita", active: true },
+  { id: "fc-outros", name: "Outros", type: "ambos", active: true }
+];
+
+const seedFinance = {
+  activeView: "overview",
+  accounts: [{ id: "fa-carteira", name: "Carteira", type: "Dinheiro", initialBalance: 0, active: true, createdAt: new Date().toISOString() }],
+  cards: [],
+  categories: FINANCE_CATEGORY_SEEDS,
+  transactions: []
+};
+
 const seedState = {
   activeFilter: "inbox",
   activeProjectId: null,
@@ -28,6 +48,8 @@ const seedState = {
   expandedDateGroups: {},
   view: "list",
   selectedTaskId: "t1",
+  preferences: { activeModule: "routine" },
+  finance: structuredClone(seedFinance),
   projects: [
     { id: "p1", name: "Pessoal", color: "#d94f35" },
     { id: "p2", name: "Trabalho", color: "#376da8" },
@@ -112,7 +134,33 @@ const els = {
   countToday: document.querySelector("#countToday"),
   countUpcoming: document.querySelector("#countUpcoming"),
   countCompleted: document.querySelector("#countCompleted"),
-  metricDone: document.querySelector("#metricDone")
+  metricDone: document.querySelector("#metricDone"),
+  moduleButtons: document.querySelectorAll("[data-module]"),
+  routineSidebar: document.querySelector("#routineSidebar"),
+  financeSidebar: document.querySelector("#financeSidebar"),
+  routineWorkspace: document.querySelector("#routineWorkspace"),
+  financeWorkspace: document.querySelector("#financeWorkspace"),
+  financeNavItems: document.querySelectorAll("[data-finance-view]"),
+  newTransactionBtn: document.querySelector("#newTransactionBtn"),
+  financeTitle: document.querySelector("#financeTitle"),
+  financeSearchInput: document.querySelector("#financeSearchInput"),
+  financeComposer: document.querySelector("#financeComposer"),
+  transactionForm: document.querySelector("#transactionForm"),
+  transactionDescription: document.querySelector("#transactionDescription"),
+  transactionType: document.querySelector("#transactionType"),
+  transactionAmount: document.querySelector("#transactionAmount"),
+  transactionCategory: document.querySelector("#transactionCategory"),
+  transactionAccount: document.querySelector("#transactionAccount"),
+  transactionCard: document.querySelector("#transactionCard"),
+  transactionDate: document.querySelector("#transactionDate"),
+  transactionDueDate: document.querySelector("#transactionDueDate"),
+  transactionStatus: document.querySelector("#transactionStatus"),
+  transactionNote: document.querySelector("#transactionNote"),
+  financeContent: document.querySelector("#financeContent"),
+  countTransactions: document.querySelector("#countTransactions"),
+  countAccounts: document.querySelector("#countAccounts"),
+  countCards: document.querySelector("#countCards"),
+  countCategories: document.querySelector("#countCategories")
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -161,6 +209,48 @@ function refreshAuthState(authenticated) {
 
 function bindEvents() {
   els.quickAddBtn.addEventListener("click", () => els.taskTitle.focus());
+
+  els.moduleButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.preferences.activeModule = button.dataset.module;
+      saveAndRender();
+    });
+  });
+
+  els.financeNavItems.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.finance.activeView = button.dataset.financeView;
+      saveAndRender();
+    });
+  });
+
+  els.newTransactionBtn.addEventListener("click", () => {
+    state.preferences.activeModule = "finance";
+    state.finance.activeView = "transactions";
+    saveAndRender();
+    els.transactionDescription.focus();
+  });
+
+  els.transactionForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createFinancialTransaction({
+      description: els.transactionDescription.value,
+      type: els.transactionType.value,
+      amount: els.transactionAmount.value,
+      categoryId: els.transactionCategory.value,
+      accountId: els.transactionAccount.value,
+      cardId: els.transactionCard.value,
+      date: els.transactionDate.value,
+      dueDate: els.transactionDueDate.value,
+      status: els.transactionStatus.value,
+      note: els.transactionNote.value
+    });
+    els.transactionForm.reset();
+    els.transactionDate.value = dateOnly(new Date().toISOString());
+    saveAndRender();
+  });
+
+  els.financeSearchInput.addEventListener("input", renderFinance);
 
   els.addProjectBtn.addEventListener("click", () => {
     els.projectDialog.showModal();
@@ -855,3 +945,339 @@ function createId() {
   }
   return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
+
+
+
+function renderShell() {
+  const activeModule = state.preferences?.activeModule || "routine";
+  els.moduleButtons.forEach((button) => button.classList.toggle("active", button.dataset.module === activeModule));
+  els.routineSidebar.classList.toggle("hidden", activeModule !== "routine");
+  els.financeSidebar.classList.toggle("hidden", activeModule !== "finance");
+  els.routineWorkspace.classList.toggle("hidden", activeModule !== "routine");
+  els.financeWorkspace.classList.toggle("hidden", activeModule !== "finance");
+}
+
+function normalizeFinance(finance) {
+  const source = finance && typeof finance === "object" ? finance : {};
+  return {
+    ...structuredClone(seedFinance),
+    ...source,
+    activeView: source.activeView || "overview",
+    accounts: Array.isArray(source.accounts) ? source.accounts.map(normalizeAccount) : structuredClone(seedFinance.accounts),
+    cards: Array.isArray(source.cards) ? source.cards.map(normalizeCard) : [],
+    categories: mergeCategories(source.categories),
+    transactions: Array.isArray(source.transactions) ? source.transactions.map(normalizeTransaction) : []
+  };
+}
+
+function mergeCategories(categories) {
+  const custom = Array.isArray(categories) ? categories : [];
+  const byId = new Map([...FINANCE_CATEGORY_SEEDS, ...custom].map((category) => [category.id, normalizeCategory(category)]));
+  return Array.from(byId.values());
+}
+
+function normalizeAccount(account) {
+  return {
+    id: account.id || createId(),
+    name: account.name || "Conta",
+    type: account.type || "Outros",
+    initialBalance: Number(account.initialBalance || account.balance || 0),
+    active: account.active !== false,
+    createdAt: account.createdAt || new Date().toISOString()
+  };
+}
+
+function normalizeCard(card) {
+  return {
+    id: card.id || createId(),
+    name: card.name || "Cartao",
+    limit: Number(card.limit || 0),
+    closingDay: Number(card.closingDay || 1),
+    dueDay: Number(card.dueDay || 10),
+    accountId: card.accountId || "",
+    active: card.active !== false,
+    createdAt: card.createdAt || new Date().toISOString()
+  };
+}
+
+function normalizeCategory(category) {
+  return {
+    id: category.id || createId(),
+    name: category.name || "Categoria",
+    type: ["receita", "despesa", "ambos"].includes(category.type) ? category.type : "ambos",
+    active: category.active !== false
+  };
+}
+
+function normalizeTransaction(transaction) {
+  return {
+    id: transaction.id || createId(),
+    description: transaction.description || transaction.descricao || "Lancamento",
+    type: transaction.type === "receita" ? "receita" : "despesa",
+    amount: Number(transaction.amount || transaction.value || transaction.valor || 0),
+    categoryId: transaction.categoryId || "",
+    accountId: transaction.accountId || "",
+    cardId: transaction.cardId || "",
+    date: transaction.date || transaction.data || dateOnly(new Date().toISOString()),
+    dueDate: transaction.dueDate || transaction.vencimento || transaction.date || dateOnly(new Date().toISOString()),
+    status: transaction.status === "pago" ? "pago" : "pendente",
+    note: transaction.note || transaction.observacao || "",
+    createdAt: transaction.createdAt || new Date().toISOString(),
+    paidAt: transaction.paidAt || (transaction.status === "pago" ? new Date().toISOString() : null)
+  };
+}
+
+function renderFinance() {
+  if (!els.financeWorkspace || state.preferences?.activeModule !== "finance") return;
+  renderFinanceNav();
+  renderTransactionOptions();
+  const view = state.finance.activeView || "overview";
+  els.financeTitle.textContent = getFinanceViewTitle(view);
+  els.financeComposer.classList.toggle("hidden", view !== "transactions");
+  if (view === "overview") renderFinanceOverview();
+  if (view === "transactions") renderTransactions();
+  if (view === "accounts") renderAccounts();
+  if (view === "cards") renderCards();
+  if (view === "categories") renderCategories();
+  queueIconRefresh();
+}
+
+function renderFinanceNav() {
+  els.financeNavItems.forEach((button) => button.classList.toggle("active", button.dataset.financeView === state.finance.activeView));
+  els.countTransactions.textContent = state.finance.transactions.length;
+  els.countAccounts.textContent = state.finance.accounts.filter((account) => account.active).length;
+  els.countCards.textContent = state.finance.cards.filter((card) => card.active).length;
+  els.countCategories.textContent = state.finance.categories.filter((category) => category.active).length;
+}
+
+function getFinanceViewTitle(view) {
+  return { overview: "Visao geral", transactions: "Lancamentos", accounts: "Contas", cards: "Cartoes", categories: "Categorias" }[view] || "Minhas Financas";
+}
+
+function renderTransactionOptions() {
+  const categories = state.finance.categories.filter((category) => category.active);
+  els.transactionCategory.innerHTML = categories.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join("");
+  els.transactionAccount.innerHTML = `<option value="">Conta</option>${state.finance.accounts.filter((account) => account.active).map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`).join("")}`;
+  els.transactionCard.innerHTML = `<option value="">Cartao</option>${state.finance.cards.filter((card) => card.active).map((card) => `<option value="${card.id}">${escapeHtml(card.name)}</option>`).join("")}`;
+  if (!els.transactionDate.value) els.transactionDate.value = dateOnly(new Date().toISOString());
+}
+
+function renderFinanceOverview() {
+  const summary = getFinanceSummary();
+  els.financeContent.innerHTML = `
+    <section class="finance-kpis">
+      <div class="finance-kpi"><span>Saldo atual</span><strong>${formatCurrency(summary.balance)}</strong></div>
+      <div class="finance-kpi"><span>Receitas do mes</span><strong>${formatCurrency(summary.income)}</strong></div>
+      <div class="finance-kpi"><span>Despesas do mes</span><strong>${formatCurrency(summary.expenses)}</strong></div>
+      <div class="finance-kpi"><span>Resultado</span><strong class="${summary.result >= 0 ? "positive" : "negative"}">${formatCurrency(summary.result)}</strong></div>
+    </section>
+    <section class="finance-two-col">
+      <div class="finance-block"><h2>Proximos pagamentos</h2>${renderTransactionRows(summary.upcoming)}</div>
+      <div class="finance-block"><h2>Ultimos lancamentos</h2>${renderTransactionRows(summary.latest)}</div>
+    </section>`;
+  bindFinanceActions();
+}
+
+function renderTransactions() {
+  els.financeContent.innerHTML = `<section class="finance-block"><h2>Lancamentos</h2>${renderTransactionRows(getFilteredTransactions())}</section>`;
+  bindFinanceActions();
+}
+
+function renderAccounts() {
+  els.financeContent.innerHTML = `
+    <section class="finance-block">
+      <h2>Contas</h2>
+      <form class="mini-form" id="accountForm">
+        <input name="name" placeholder="Nome da conta" required />
+        <select name="type"><option>Conta corrente</option><option>Poupanca</option><option>Dinheiro</option><option>Carteira digital</option><option>Outros</option></select>
+        <input name="initialBalance" type="number" step="0.01" placeholder="Saldo inicial" />
+        <button type="submit"><i data-lucide="plus"></i>Adicionar</button>
+      </form>
+      ${state.finance.accounts.map((account) => `<div class="finance-row"><div><strong>${escapeHtml(account.name)}</strong><span>${escapeHtml(account.type)} - ${formatCurrency(account.initialBalance)}</span></div><button class="icon-button" data-finance-action="toggle-account" data-id="${account.id}"><i data-lucide="${account.active ? "eye" : "eye-off"}"></i></button></div>`).join("")}
+    </section>`;
+  document.querySelector("#accountForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    createAccount({ name: data.get("name"), type: data.get("type"), initialBalance: data.get("initialBalance") });
+    saveAndRender();
+  });
+  bindFinanceActions();
+}
+
+function renderCards() {
+  els.financeContent.innerHTML = `
+    <section class="finance-block">
+      <h2>Cartoes</h2>
+      <form class="mini-form" id="cardForm">
+        <input name="name" placeholder="Nome do cartao" required />
+        <input name="limit" type="number" step="0.01" placeholder="Limite" />
+        <input name="closingDay" type="number" min="1" max="31" placeholder="Fechamento" />
+        <input name="dueDay" type="number" min="1" max="31" placeholder="Vencimento" />
+        <select name="accountId"><option value="">Conta relacionada</option>${state.finance.accounts.map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`).join("")}</select>
+        <button type="submit"><i data-lucide="plus"></i>Adicionar</button>
+      </form>
+      ${state.finance.cards.map((card) => `<div class="finance-row"><div><strong>${escapeHtml(card.name)}</strong><span>Limite ${formatCurrency(card.limit)} - fecha dia ${card.closingDay}, vence dia ${card.dueDay}</span></div><button class="icon-button" data-finance-action="toggle-card" data-id="${card.id}"><i data-lucide="${card.active ? "eye" : "eye-off"}"></i></button></div>`).join("")}
+    </section>`;
+  document.querySelector("#cardForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    createCard({ name: data.get("name"), limit: data.get("limit"), closingDay: data.get("closingDay"), dueDay: data.get("dueDay"), accountId: data.get("accountId") });
+    saveAndRender();
+  });
+  bindFinanceActions();
+}
+
+function renderCategories() {
+  els.financeContent.innerHTML = `
+    <section class="finance-block">
+      <h2>Categorias</h2>
+      <form class="mini-form" id="categoryForm">
+        <input name="name" placeholder="Nome da categoria" required />
+        <select name="type"><option value="despesa">Despesa</option><option value="receita">Receita</option><option value="ambos">Ambos</option></select>
+        <button type="submit"><i data-lucide="plus"></i>Adicionar</button>
+      </form>
+      ${state.finance.categories.map((category) => `<div class="finance-row"><div><strong>${escapeHtml(category.name)}</strong><span>${escapeHtml(category.type)}</span></div><button class="icon-button" data-finance-action="toggle-category" data-id="${category.id}"><i data-lucide="${category.active ? "eye" : "eye-off"}"></i></button></div>`).join("")}
+    </section>`;
+  document.querySelector("#categoryForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    createCategory({ name: data.get("name"), type: data.get("type") });
+    saveAndRender();
+  });
+  bindFinanceActions();
+}
+
+function createFinancialTransaction(input) {
+  const transaction = normalizeTransaction({
+    id: createId(),
+    description: String(input.description || "").trim(),
+    type: input.type,
+    amount: input.amount,
+    categoryId: input.categoryId,
+    accountId: input.accountId,
+    cardId: input.cardId,
+    date: input.date || dateOnly(new Date().toISOString()),
+    dueDate: input.dueDate || input.date || dateOnly(new Date().toISOString()),
+    status: input.status,
+    note: input.note,
+    paidAt: input.status === "pago" ? new Date().toISOString() : null,
+    createdAt: new Date().toISOString()
+  });
+  if (!transaction.description || transaction.amount <= 0) return null;
+  state.finance.transactions.unshift(transaction);
+  return transaction;
+}
+
+function createAccount(input) {
+  const account = normalizeAccount({ id: createId(), ...input, createdAt: new Date().toISOString() });
+  state.finance.accounts.push(account);
+  return account;
+}
+
+function createCard(input) {
+  const card = normalizeCard({ id: createId(), ...input, createdAt: new Date().toISOString() });
+  state.finance.cards.push(card);
+  return card;
+}
+
+function createCategory(input) {
+  const category = normalizeCategory({ id: createId(), ...input });
+  state.finance.categories.push(category);
+  return category;
+}
+
+function getFinanceSummary() {
+  const now = new Date();
+  const month = now.getMonth();
+  const year = now.getFullYear();
+  const transactions = state.finance.transactions;
+  const paid = transactions.filter((item) => item.status === "pago");
+  const income = paid.filter((item) => item.type === "receita" && isSameMonth(item.date, month, year)).reduce((sum, item) => sum + item.amount, 0);
+  const expenses = paid.filter((item) => item.type === "despesa" && isSameMonth(item.date, month, year)).reduce((sum, item) => sum + item.amount, 0);
+  const initial = state.finance.accounts.filter((account) => account.active).reduce((sum, account) => sum + account.initialBalance, 0);
+  const totalIncome = paid.filter((item) => item.type === "receita").reduce((sum, item) => sum + item.amount, 0);
+  const totalExpenses = paid.filter((item) => item.type === "despesa").reduce((sum, item) => sum + item.amount, 0);
+  return {
+    balance: initial + totalIncome - totalExpenses,
+    income,
+    expenses,
+    result: income - expenses,
+    upcoming: transactions.filter((item) => item.type === "despesa" && item.status === "pendente").sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate))).slice(0, 6),
+    latest: transactions.slice(0, 6)
+  };
+}
+
+function getFilteredTransactions() {
+  const query = els.financeSearchInput.value.trim().toLowerCase();
+  return state.finance.transactions.filter((item) => {
+    if (!query) return true;
+    return [item.description, item.note, getCategory(item.categoryId)?.name, getPaymentName(item)].join(" ").toLowerCase().includes(query);
+  });
+}
+
+function renderTransactionRows(transactions) {
+  if (!transactions.length) return `<p class="column-empty">Nenhum lancamento.</p>`;
+  return `<div class="finance-list">${transactions.map((item) => `
+    <div class="finance-row transaction-row">
+      <div>
+        <strong>${escapeHtml(item.description)}</strong>
+        <span>${formatDateOnly(item.date)} - ${escapeHtml(getCategory(item.categoryId)?.name || "Sem categoria")} - ${escapeHtml(getPaymentName(item))}</span>
+      </div>
+      <div class="transaction-side">
+        <b class="${item.type === "receita" ? "positive" : "negative"}">${item.type === "receita" ? "+" : "-"}${formatCurrency(item.amount)}</b>
+        <button class="status-mini ${item.status}" data-finance-action="toggle-transaction" data-id="${item.id}">${item.status === "pago" ? "Pago" : "Pendente"}</button>
+      </div>
+    </div>`).join("")}</div>`;
+}
+
+function bindFinanceActions() {
+  document.querySelectorAll("[data-finance-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.id;
+      const action = button.dataset.financeAction;
+      if (action === "toggle-transaction") {
+        const item = state.finance.transactions.find((transaction) => transaction.id === id);
+        item.status = item.status === "pago" ? "pendente" : "pago";
+        item.paidAt = item.status === "pago" ? new Date().toISOString() : null;
+      }
+      if (action === "toggle-account") {
+        const item = state.finance.accounts.find((account) => account.id === id);
+        item.active = !item.active;
+      }
+      if (action === "toggle-card") {
+        const item = state.finance.cards.find((card) => card.id === id);
+        item.active = !item.active;
+      }
+      if (action === "toggle-category") {
+        const item = state.finance.categories.find((category) => category.id === id);
+        item.active = !item.active;
+      }
+      saveAndRender();
+    });
+  });
+}
+
+function getCategory(id) {
+  return state.finance.categories.find((category) => category.id === id);
+}
+
+function getPaymentName(transaction) {
+  if (transaction.cardId) return state.finance.cards.find((card) => card.id === transaction.cardId)?.name || "Cartao";
+  if (transaction.accountId) return state.finance.accounts.find((account) => account.id === transaction.accountId)?.name || "Conta";
+  return "Sem pagamento";
+}
+
+function isSameMonth(value, month, year) {
+  const date = new Date(`${value}T12:00:00`);
+  return date.getMonth() === month && date.getFullYear() === year;
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
+}
+
+function formatDateOnly(value) {
+  if (!value) return "Sem data";
+  return new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`));
+}
+

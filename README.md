@@ -1,6 +1,54 @@
-# Foco - Controle de Tarefas
+# Focus
 
-Aplicacao pessoal para controle de tarefas, com login no servidor e dados compartilhados entre dispositivos.
+Focus e uma aplicacao pessoal para organizar rotina e financas em um unico lugar, sem virar um ERP pessoal.
+
+Conceito do produto: **Focus em voce.**
+
+## Ambientes
+
+### Minha Rotina
+
+Mantem o controle de tarefas existente:
+
+- Entrada, Hoje, Proximas e Concluidas
+- Projetos
+- Criacao, edicao e exclusao de tarefas
+- Prioridades, status, datas e etiquetas
+- Subtarefas
+- Links por tarefa
+- Filtro por periodo de datas
+- Visualizacao em lista, painel/Kanban e agrupamento por data expansivel
+- Nicho Dev com status: Analise, Em progresso, Dev teste, SDX teste, Producao e Finalizado
+
+### Minhas Financas
+
+Controle financeiro pessoal simples:
+
+- Visao geral financeira
+- Saldo consolidado das contas
+- Receitas, despesas e resultado do mes
+- Proximos pagamentos
+- Ultimos lancamentos
+- Lancamentos de receita/despesa
+- Contas
+- Cartoes
+- Categorias
+
+Nao ha integracao bancaria, Open Finance, OFX ou APIs externas financeiras.
+
+## Arquitetura
+
+A arquitetura continua simples:
+
+- Node.js puro
+- HTML
+- CSS
+- JavaScript
+- `data.json`
+- AES-256-GCM
+- Sessao via cookie HttpOnly
+- Sem banco de dados externo
+- Sem React/Next.js/framework
 
 ## Como rodar localmente
 
@@ -19,63 +67,52 @@ http://localhost:3000
 
 A senha nao fica no frontend. O servidor le o hash SHA-256 em `config.server.json` ou na variavel de ambiente `FOCUS_PASSWORD_HASH`.
 
-O arquivo `data.json` tambem fica protegido: ele e salvo criptografado com AES-256-GCM. A chave de criptografia e derivada da sua senha, entao abrir o arquivo direto no servidor mostra apenas dados cifrados.
+O arquivo `data.json` fica criptografado com AES-256-GCM. A chave de criptografia e derivada da senha, entao abrir o arquivo direto no servidor mostra apenas dados cifrados.
 
-Importante: isso protege contra leitura casual do arquivo `data.json`. Se outra pessoa tiver acesso administrativo total ao servidor, ela ainda pode alterar arquivos da aplicacao, capturar processos ou mudar configuracoes. Para isolamento forte entre socios no mesmo servidor, o ideal e rodar o Focus em um usuario do Windows separado, com permissao NTFS exclusiva na pasta `C:\focus`.
+Para isolamento melhor no Windows Server, rode o Focus em um usuario do Windows separado e restrinja a pasta `C:\focus` via permissao NTFS.
 
-No Windows PowerShell, gere o hash da senha assim:
+## Estrutura do state
 
-```powershell
-$password = "sua-senha-aqui"
-$sha = [System.Security.Cryptography.SHA256]::Create()
-$bytes = [System.Text.Encoding]::UTF8.GetBytes($password)
-(($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join '')
+A estrutura atual suporta dados antigos e novos:
+
+```json
+{
+  "tasks": [],
+  "projects": [],
+  "activity": [],
+  "preferences": {
+    "activeModule": "routine"
+  },
+  "finance": {
+    "activeView": "overview",
+    "accounts": [],
+    "cards": [],
+    "categories": [],
+    "transactions": []
+  }
+}
 ```
 
-Crie tambem um salt de criptografia:
+## Compatibilidade
 
-```powershell
-[Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(16))
-```
-
-Copie os dois valores para `config.server.json`, usando o formato de `config.server.sample.json`.
+Arquivos `data.json` antigos continuam compativeis. Ao carregar dados antigos, o frontend normaliza o state adicionando `preferences` e `finance`, sem apagar tarefas, projetos, subtarefas, links, status Dev ou historico existente.
 
 ## Publicar no Windows Server
 
-1. Instale o Node.js LTS no servidor.
-2. Copie a pasta do projeto para o servidor, por exemplo `C:\focus`.
+1. Instale o Node.js LTS.
+2. Copie a pasta do projeto para `C:\focus`.
 3. Crie `C:\focus\config.server.json` com `passwordHash` e `encryptionSalt`.
 4. Rode `node server.js` para testar.
-5. Libere a porta `3000` no firewall ou configure IIS/Nginx como proxy reverso para `http://localhost:3000`.
-6. Use HTTPS quando expor para internet.
-7. Restrinja as permissoes NTFS da pasta `C:\focus` ao seu usuario e ao usuario que roda o servico.
+5. Use PM2 para manter em execucao.
+6. Libere a porta ou configure IIS como proxy reverso.
+7. Use HTTPS ao expor para internet.
 
-## Dados
+## Proximos passos
 
-As tarefas ficam salvas em `data.json`, criado automaticamente no servidor. Esse arquivo esta no `.gitignore` para nao subir seus dados pessoais ao GitHub.
-
-## O que ja tem
-
-- Projetos com cor
-- Criacao, edicao e remocao de tarefas
-- Prioridade: alta, media e baixa
-- Status: pendente, em andamento e concluida
-- Data e hora de vencimento
-- Etiquetas
-- Subtarefas
-- Busca
-- Filtros por entrada, hoje, proximas, concluidas, prioridade, Dev e periodo de datas
-- Visualizacao em lista, painel e agrupamento por data expansivel
-- Login com cookie de sessao HttpOnly
-- Persistencia compartilhada no servidor
-- `data.json` criptografado no disco`r`n- Nicho Dev com status: Analise, Em progresso, Dev teste, SDX teste, Producao e Finalizado`r`n- Links por tarefa para Datadog, ClickUp e outros sistemas
-
-## Proximos passos naturais
-
-- Instalar como servico do Windows
-- Configurar proxy reverso no IIS
-- HTTPS com certificado valido
+- Instalar proxy reverso no IIS com HTTPS
 - Backup automatico do `data.json`
+- Assistente pessoal
+- Comandos em linguagem natural
+- Entrada por voz
+- Notificacoes
 - Tarefas recorrentes
-- Lembretes por e-mail ou notificacao
-

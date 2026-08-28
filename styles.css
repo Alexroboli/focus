@@ -915,3 +915,228 @@ svg {
 .composer form { grid-template-columns: minmax(180px, 1fr) 210px 150px 120px 86px 126px; }
 @media (max-width: 1120px) { .composer form { grid-template-columns: 1fr 1fr; } }
 
+
+.module-switch {
+  display: grid;
+  gap: 8px;
+}
+
+.module-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 850;
+  text-align: left;
+}
+
+.module-option.active,
+.module-option:hover {
+  background: var(--ink);
+  color: white;
+}
+
+.routine-sidebar,
+.finance-sidebar {
+  display: grid;
+  gap: 14px;
+}
+
+.finance-composer {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.finance-composer form {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 120px 120px 150px 150px 150px 135px 135px 120px minmax(140px, 1fr) 126px;
+  gap: 8px;
+  padding: 10px;
+}
+
+.finance-composer input,
+.finance-composer select,
+.mini-form input,
+.mini-form select {
+  min-height: 40px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.finance-composer button,
+.mini-form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font-weight: 800;
+}
+
+.finance-content {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+}
+
+.finance-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.finance-kpi,
+.finance-block {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: var(--shadow);
+}
+
+.finance-kpi {
+  display: grid;
+  gap: 8px;
+  padding: 15px;
+}
+
+.finance-kpi span,
+.finance-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.finance-kpi strong {
+  font-size: 25px;
+  letter-spacing: 0;
+}
+
+.finance-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.finance-block {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.finance-block h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.finance-list {
+  display: grid;
+  gap: 8px;
+}
+
+.finance-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.finance-row strong,
+.finance-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-side {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.positive {
+  color: var(--green);
+}
+
+.negative {
+  color: #ad2f21;
+}
+
+.status-mini {
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.status-mini.pago {
+  border-color: rgba(47, 125, 107, 0.28);
+  background: rgba(47, 125, 107, 0.12);
+  color: var(--green);
+}
+
+.mini-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+  gap: 8px;
+}
+
+@media (max-width: 1320px) {
+  .finance-composer form {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .finance-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .module-switch {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .module-option {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .finance-composer form,
+  .finance-kpis,
+  .finance-two-col,
+  .mini-form {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-row {
+    grid-template-columns: 1fr;
+  }
+
+  .transaction-side {
+    justify-items: start;
+  }
+}
