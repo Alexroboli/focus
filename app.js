@@ -1492,6 +1492,7 @@ function renderTransactionRows(transactions) {
         <div class="transaction-actions">
           <b class="${item.type === "receita" ? "positive" : "negative"}">${item.type === "receita" ? "+" : "-"}${formatCurrency(item.amount)}</b>
           <button class="icon-button" type="button" data-finance-action="edit-transaction" data-id="${item.id}" aria-label="Editar lancamento"><i data-lucide="pencil"></i></button>
+          <button class="icon-button danger-icon" type="button" data-finance-action="delete-transaction" data-id="${item.id}" aria-label="Excluir lancamento"><i data-lucide="trash-2"></i></button>
           <button class="status-mini ${item.status}" type="button" data-finance-action="toggle-transaction" data-id="${item.id}">${item.status === "pago" ? "Pago" : "Pendente"}</button>
         </div>
       </div>`;
@@ -1514,7 +1515,8 @@ function bindFinanceActions() {
       event.currentTarget.reset();
     });
   }
-document.querySelectorAll('[data-finance-action="month-pick"]').forEach((input) => {
+
+  document.querySelectorAll('[data-finance-action="month-pick"]').forEach((input) => {
     input.addEventListener("change", () => {
       state.finance.activeMonth = input.value || monthKey(new Date());
       setDefaultTransactionDates(true);
@@ -1547,6 +1549,18 @@ document.querySelectorAll('[data-finance-action="month-pick"]').forEach((input) 
         fillTransactionForm(item);
         els.transactionDescription.focus();
         return;
+      }
+      if (action === "delete-transaction") {
+        const item = state.finance.transactions.find((transaction) => transaction.id === id);
+        if (!item) return;
+        const message = `Excluir "${item.description}"? Esta acao nao pode ser desfeita.`;
+        if (!window.confirm(message)) return;
+        state.finance.transactions = state.finance.transactions.filter((transaction) => transaction.id !== id);
+        if (state.finance.editingTransactionId === id) {
+          state.finance.editingTransactionId = null;
+          state.finance.composerOpen = false;
+          resetTransactionForm();
+        }
       }
       if (action === "toggle-transaction") {
         const item = state.finance.transactions.find((transaction) => transaction.id === id);

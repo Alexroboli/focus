@@ -1143,6 +1143,15 @@ svg {
   color: var(--ink);
 }
 
+.danger-icon {
+  color: #b23b32;
+}
+
+.danger-icon:hover {
+  border-color: rgba(178, 59, 50, 0.28);
+  background: #fff7f5;
+}
+
 .transaction-actions {
   display: flex;
   align-items: center;
