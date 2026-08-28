@@ -363,6 +363,8 @@ function render() {
   renderControls();
   renderTasks();
   renderDetails();
+  renderShell();
+  renderFinance();
   queueIconRefresh();
 }
 
@@ -1280,4 +1282,5 @@ function formatDateOnly(value) {
   if (!value) return "Sem data";
   return new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`));
 }
+
 

@@ -52,10 +52,51 @@
         </div>
 
         <div class="routine-sidebar" id="routineSidebar">
-        <button class="primary-action" id="quickAddBtn" type="button">
-          <i data-lucide="plus"></i>
-          Nova tarefa
-        </button>
+          <button class="primary-action" id="quickAddBtn" type="button">
+            <i data-lucide="plus"></i>
+            Nova tarefa
+          </button>
+
+          <nav class="nav-stack" aria-label="Filtros rapidos">
+            <button class="nav-item active" type="button" data-filter="inbox">
+              <i data-lucide="inbox"></i>
+              <span>Entrada</span>
+              <b id="countInbox">0</b>
+            </button>
+            <button class="nav-item" type="button" data-filter="today">
+              <i data-lucide="calendar-days"></i>
+              <span>Hoje</span>
+              <b id="countToday">0</b>
+            </button>
+            <button class="nav-item" type="button" data-filter="upcoming">
+              <i data-lucide="calendar-clock"></i>
+              <span>Proximas</span>
+              <b id="countUpcoming">0</b>
+            </button>
+            <button class="nav-item" type="button" data-filter="completed">
+              <i data-lucide="check-circle-2"></i>
+              <span>Concluidas</span>
+              <b id="countCompleted">0</b>
+            </button>
+          </nav>
+
+          <div class="sidebar-section">
+            <div class="section-title">
+              <span>Projetos</span>
+              <button class="icon-button" id="addProjectBtn" type="button" aria-label="Adicionar projeto">
+                <i data-lucide="folder-plus"></i>
+              </button>
+            </div>
+            <div class="project-list" id="projectList"></div>
+          </div>
+
+          <div class="sidebar-section compact">
+            <div class="section-title"><span>Produtividade</span></div>
+            <div class="metric">
+              <span id="metricDone">0</span>
+              <small>tarefas finalizadas nos ultimos 7 dias</small>
+            </div>
+          </div>
         </div>
 
         <div class="finance-sidebar hidden" id="financeSidebar">
@@ -76,49 +117,7 @@
           <i data-lucide="log-out"></i>
           Sair
         </button>
-
-        <nav class="nav-stack" aria-label="Filtros rapidos">
-          <button class="nav-item active" type="button" data-filter="inbox">
-            <i data-lucide="inbox"></i>
-            <span>Entrada</span>
-            <b id="countInbox">0</b>
-          </button>
-          <button class="nav-item" type="button" data-filter="today">
-            <i data-lucide="calendar-days"></i>
-            <span>Hoje</span>
-            <b id="countToday">0</b>
-          </button>
-          <button class="nav-item" type="button" data-filter="upcoming">
-            <i data-lucide="calendar-clock"></i>
-            <span>Proximas</span>
-            <b id="countUpcoming">0</b>
-          </button>
-          <button class="nav-item" type="button" data-filter="completed">
-            <i data-lucide="check-circle-2"></i>
-            <span>Concluidas</span>
-            <b id="countCompleted">0</b>
-          </button>
-        </nav>
-
-        <div class="sidebar-section">
-          <div class="section-title">
-            <span>Projetos</span>
-            <button class="icon-button" id="addProjectBtn" type="button" aria-label="Adicionar projeto">
-              <i data-lucide="folder-plus"></i>
-            </button>
-          </div>
-          <div class="project-list" id="projectList"></div>
-        </div>
-
-        <div class="sidebar-section compact">
-          <div class="section-title"><span>Produtividade</span></div>
-          <div class="metric">
-            <span id="metricDone">0</span>
-            <small>tarefas finalizadas nos ultimos 7 dias</small>
-          </div>
-        </div>
       </aside>
-
       <main class="workspace routine-workspace" id="routineWorkspace">
         <header class="topbar">
           <div>
@@ -273,5 +272,6 @@
     </dialog>
   </body>
 </html>
+
 
 
