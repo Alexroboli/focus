@@ -278,13 +278,13 @@
             <label class="field-label"><span>Conta</span><select id="transactionAccount"></select></label>
             <label class="field-label"><span>Cartao</span><select id="transactionCard"></select></label>
             <label class="field-label"><span>Competencia</span><input id="transactionCompetence" type="month" /></label>
-            <label class="field-label"><span>Data de baixa</span><input id="transactionDate" type="date" /></label>
+            <label class="field-label" id="transactionDateField"><span>Data de baixa</span><input id="transactionDate" type="date" /></label>
             <label class="field-label"><span>Vencimento</span><input id="transactionDueDate" type="date" /></label>
             <label class="field-label"><span>Status</span><select id="transactionStatus"><option value="pendente">Pendente</option><option value="pago">Pago</option></select></label>
             <label class="field-label"><span>Repeticao</span><select id="transactionRepeat"><option value="single">Unico</option><option value="fixed">Fixo mensal</option><option value="installment">Parcelado</option><option value="interval">Fixo por periodo</option></select></label>
-            <label class="field-label"><span>Parcela inicial</span><input id="transactionInstallmentStart" type="number" min="1" max="480" value="1" placeholder="1" /></label>
-            <label class="field-label"><span>Total parcelas</span><input id="transactionInstallments" type="number" min="1" max="480" value="1" placeholder="10" /></label>
-            <label class="field-label"><span>Periodo dias</span><input id="transactionIntervalDays" type="number" min="1" max="365" value="15" placeholder="15" /></label>
+            <label class="field-label" data-repeat-field><span>Parcela inicial</span><input id="transactionInstallmentStart" type="number" min="1" max="480" value="1" placeholder="1" /></label>
+            <label class="field-label" data-repeat-field><span>Total parcelas</span><input id="transactionInstallments" type="number" min="1" max="480" value="1" placeholder="10" /></label>
+            <label class="field-label" data-repeat-field><span>Periodo dias</span><input id="transactionIntervalDays" type="number" min="1" max="365" value="15" placeholder="15" /></label>
             <label class="field-label wide"><span>Observacao</span><input id="transactionNote" type="text" placeholder="Detalhe opcional" /></label>
             <p class="transaction-assist" id="transactionAssistMessage"></p>
             <button type="submit"><i data-lucide="send"></i>Adicionar</button>

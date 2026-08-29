@@ -344,6 +344,10 @@ function bindEvents() {
     renderSubcategoryOptions(els.transactionCategory.value);
   });
 
+  els.transactionRepeat.addEventListener("change", updateTransactionFieldVisibility);
+  els.transactionStatus.addEventListener("change", updateTransactionFieldVisibility);
+  els.transactionDueDate.addEventListener("change", updateTransactionFieldVisibility);
+
   els.voiceTransactionBtn.addEventListener("click", () => {
     openTransactionComposer();
     startVoiceTransaction();
@@ -1075,8 +1079,6 @@ function createId() {
   return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-
-
 function renderShell() {
   const activeModule = state.preferences?.activeModule || "routine";
   els.moduleButtons.forEach((button) => button.classList.toggle("active", button.dataset.module === activeModule));
@@ -1259,6 +1261,7 @@ function renderTransactionOptions() {
   els.transactionAccount.innerHTML = `<option value="">Conta</option>${state.finance.accounts.filter((account) => account.active).map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`).join("")}`;
   els.transactionCard.innerHTML = `<option value="">Cartao</option>${state.finance.cards.filter((card) => card.active).map((card) => `<option value="${card.id}">${escapeHtml(card.name)}</option>`).join("")}`;
   setDefaultTransactionDates(false);
+  updateTransactionFieldVisibility();
 }
 
 function renderFinanceOverview() {
@@ -1658,9 +1661,12 @@ function updateFinancialTransaction(id, input) {
     date: input.date || transaction.date,
     dueDate: input.dueDate || transaction.dueDate,
     status: input.status,
-    note: input.note,
-      paidAt: input.status === "pago" ? (input.date || transaction.paidAt || dateOnly(new Date().toISOString())) : null,
+    repeat: input.repeat || transaction.repeat || "single",
+    installmentNumber: Number(input.installmentStart || transaction.installmentNumber || 1),
+    installmentTotal: Number(input.installments || transaction.installmentTotal || 1),
     intervalDays: Number(input.intervalDays || transaction.intervalDays || 0),
+    note: input.note,
+    paidAt: input.status === "pago" ? (input.date || transaction.paidAt || dateOnly(new Date().toISOString())) : null,
     updatedAt: new Date().toISOString()
   });
   Object.assign(transaction, next);
@@ -1676,6 +1682,7 @@ function resetTransactionForm() {
   els.transactionRepeat.value = "single";
   state.finance.editingTransactionId = null;
   setDefaultTransactionDates(true);
+  updateTransactionFieldVisibility();
 }
 
 function fillTransactionForm(transaction) {
@@ -1695,6 +1702,22 @@ function fillTransactionForm(transaction) {
   els.transactionInstallments.value = transaction.installmentTotal || "1";
   els.transactionIntervalDays.value = transaction.intervalDays || "15";
   els.transactionNote.value = transaction.note || "";
+  updateTransactionFieldVisibility();
+}
+
+function updateTransactionFieldVisibility() {
+  const repeat = els.transactionRepeat.value;
+  const showRepeatFields = repeat === "installment" || repeat === "interval";
+  document.querySelectorAll("[data-repeat-field]").forEach((field) => {
+    field.classList.toggle("hidden", !showRepeatFields);
+  });
+
+  const dateField = document.querySelector("#transactionDateField");
+  const isPaid = els.transactionStatus.value === "pago";
+  if (dateField) dateField.classList.toggle("hidden", !isPaid);
+  if (!isPaid) {
+    els.transactionDate.value = els.transactionDueDate.value || dateOnly(new Date().toISOString());
+  }
 }
 
 function createAccount(input) {
