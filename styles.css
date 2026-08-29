@@ -1040,7 +1040,8 @@ svg {
 .finance-composer input:not([type="checkbox"]),
 .finance-composer select,
 .mini-form input,
-.mini-form select {
+.mini-form select,
+.subcategory-form input {
   min-height: 40px;
   min-width: 0;
   padding: 0 10px;
@@ -1051,7 +1052,8 @@ svg {
 }
 
 .finance-composer button,
-.mini-form button {
+.mini-form button,
+.subcategory-form button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1349,6 +1351,95 @@ svg {
   color: var(--green);
 }
 
+
+.category-list {
+  display: grid;
+  gap: 10px;
+}
+
+.category-row {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.category-row-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.category-row-header strong,
+.category-row-header span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-row-header span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.subcategory-area {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 10px;
+  align-items: start;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.subcategory-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+
+.subcategory-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  max-width: 100%;
+  padding: 0 7px 0 10px;
+  border: 1px solid rgba(39, 134, 95, 0.24);
+  border-radius: 999px;
+  background: rgba(39, 134, 95, 0.08);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.subcategory-chip button {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.subcategory-chip button:hover {
+  background: rgba(39, 134, 95, 0.16);
+}
+
+.subcategory-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
 .mini-form {
   display: grid;
   grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
@@ -1379,7 +1470,9 @@ svg {
   .finance-composer form,
   .finance-kpis,
   .finance-two-col,
-  .mini-form {
+  .mini-form,
+  .subcategory-area,
+  .subcategory-form {
     grid-template-columns: 1fr;
   }
 

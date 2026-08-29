@@ -1409,9 +1409,9 @@ function renderCategories() {
         <input name="name" placeholder="Nome da categoria" required />
         <select name="type"><option value="despesa">Despesa</option><option value="receita">Receita</option><option value="ambos">Ambos</option></select>
         <input name="subcategories" placeholder="Subcategorias: Luz, Agua, Condominio" />
-        <button type="submit"><i data-lucide="plus"></i>Adicionar</button>
+        <button type="submit"><i data-lucide="plus"></i>Adicionar categoria</button>
       </form>
-      ${state.finance.categories.map((category) => `<div class="finance-row"><div><strong>${escapeHtml(category.name)}</strong><span>${escapeHtml(category.type)}${category.subcategories?.length ? ` - ${escapeHtml(category.subcategories.map((item) => item.name).join(", "))}` : ""}</span></div><button class="icon-button" data-finance-action="toggle-category" data-id="${category.id}"><i data-lucide="${category.active ? "eye" : "eye-off"}"></i></button></div>`).join("")}
+      <div class="category-list">${state.finance.categories.map(renderCategoryRow).join("")}</div>
     </section>`;
   document.querySelector("#categoryForm").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -1419,7 +1419,43 @@ function renderCategories() {
     createCategory({ name: data.get("name"), type: data.get("type"), subcategories: parseSubcategoryList(data.get("subcategories")) });
     saveAndRender();
   });
+  document.querySelectorAll(".subcategory-form").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      addSubcategoriesToCategory(event.currentTarget.dataset.categoryId, data.get("name"));
+      saveAndRender();
+    });
+  });
   bindFinanceActions();
+}
+
+function renderCategoryRow(category) {
+  const subcategories = getSubcategories(category.id);
+  const chips = subcategories.length
+    ? subcategories.map((subcategory) => `
+      <span class="subcategory-chip">
+        ${escapeHtml(subcategory.name)}
+        <button type="button" data-finance-action="remove-subcategory" data-id="${category.id}" data-subcategory-id="${subcategory.id}" aria-label="Remover subcategoria ${escapeHtml(subcategory.name)}"><i data-lucide="x"></i></button>
+      </span>`).join("")
+    : `<span class="empty-copy">Nenhuma subcategoria vinculada.</span>`;
+  return `
+    <div class="category-row">
+      <div class="category-row-header">
+        <div>
+          <strong>${escapeHtml(category.name)}</strong>
+          <span>${escapeHtml(category.type)}</span>
+        </div>
+        <button class="icon-button" type="button" data-finance-action="toggle-category" data-id="${category.id}" aria-label="${category.active ? "Ocultar" : "Mostrar"} categoria"><i data-lucide="${category.active ? "eye" : "eye-off"}"></i></button>
+      </div>
+      <div class="subcategory-area">
+        <div class="subcategory-list">${chips}</div>
+        <form class="subcategory-form" data-category-id="${category.id}">
+          <input name="name" placeholder="Nova subcategoria" required />
+          <button type="submit"><i data-lucide="plus"></i>Vincular</button>
+        </form>
+      </div>
+    </div>`;
 }
 
 function openTransactionComposer() {
@@ -1671,6 +1707,20 @@ function createCategory(input) {
   return category;
 }
 
+function addSubcategoriesToCategory(categoryId, value) {
+  const category = state.finance.categories.find((item) => item.id === categoryId);
+  if (!category) return;
+  const existingNames = new Set(getSubcategories(category.id).map((subcategory) => normalizeText(subcategory.name)));
+  const additions = parseSubcategoryList(value).filter((subcategory) => !existingNames.has(normalizeText(subcategory.name)));
+  category.subcategories = [...getSubcategories(category.id), ...additions];
+}
+
+function removeSubcategoryFromCategory(categoryId, subcategoryId) {
+  const category = state.finance.categories.find((item) => item.id === categoryId);
+  if (!category) return;
+  category.subcategories = getSubcategories(category.id).filter((subcategory) => subcategory.id !== subcategoryId);
+}
+
 function getFinanceSummary() {
   const selectedMonth = state.finance.activeMonth || monthKey(new Date());
   const today = dateOnly(new Date().toISOString());
@@ -1839,6 +1889,9 @@ function bindFinanceActions() {
       if (action === "toggle-category") {
         const item = state.finance.categories.find((category) => category.id === id);
         if (item) item.active = !item.active;
+      }
+      if (action === "remove-subcategory") {
+        removeSubcategoryFromCategory(id, button.dataset.subcategoryId);
       }
       saveAndRender();
     });
