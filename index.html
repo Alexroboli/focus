@@ -143,6 +143,7 @@
           <input class="hidden" id="receiptFileInput" type="file" accept="application/pdf,image/*,.txt" />
           <nav class="nav-stack" aria-label="Menus financeiros">
             <button class="nav-item active" type="button" data-finance-view="overview"><i data-lucide="layout-dashboard"></i><span>Visao geral</span><b></b></button>
+            <button class="nav-item" type="button" data-finance-view="summary"><i data-lucide="list-collapse"></i><span>Resumo</span><b></b></button>
             <button class="nav-item" type="button" data-finance-view="transactions"><i data-lucide="receipt-text"></i><span>Lancamentos</span><b id="countTransactions">0</b></button>
             <button class="nav-item" type="button" data-finance-view="accounts"><i data-lucide="landmark"></i><span>Contas</span><b id="countAccounts">0</b></button>
             <button class="nav-item" type="button" data-finance-view="cards"><i data-lucide="credit-card"></i><span>Cartoes</span><b id="countCards">0</b></button>
@@ -273,6 +274,7 @@
             <label class="field-label"><span>Descricao</span><input id="transactionDescription" type="text" placeholder="Ex: Financiamento Caixa" required /></label>
             <label class="field-label"><span>Valor</span><input id="transactionAmount" type="number" min="0" step="0.01" placeholder="0,00" required /></label>
             <label class="field-label"><span>Categoria</span><select id="transactionCategory"></select></label>
+            <label class="field-label"><span>Subcategoria</span><select id="transactionSubcategory"></select></label>
             <label class="field-label"><span>Conta</span><select id="transactionAccount"></select></label>
             <label class="field-label"><span>Cartao</span><select id="transactionCard"></select></label>
             <label class="field-label"><span>Competencia</span><input id="transactionCompetence" type="month" /></label>

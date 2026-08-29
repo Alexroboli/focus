@@ -19,21 +19,21 @@ const DEV_STATUSES = [
   { value: "em_progresso", label: "Em progresso" },
   { value: "dev_teste", label: "Dev teste" },
   { value: "sdx_teste", label: "SDX teste" },
-    { value: "ready_deploy", label: "Ready To Deploy" },
-{ value: "producao", label: "Producao" },
+  { value: "ready_deploy", label: "Ready To Deploy" },
+  { value: "producao", label: "Producao" },
   { value: "finalizado", label: "Finalizado" }
 ];
 
 const FINANCE_CATEGORY_SEEDS = [
-  { id: "fc-alimentacao", name: "Alimentacao", type: "despesa", active: true },
-  { id: "fc-moradia", name: "Moradia", type: "despesa", active: true },
-  { id: "fc-transporte", name: "Transporte", type: "despesa", active: true },
-  { id: "fc-saude", name: "Saude", type: "despesa", active: true },
-  { id: "fc-educacao", name: "Educacao", type: "despesa", active: true },
-  { id: "fc-lazer", name: "Lazer", type: "despesa", active: true },
-  { id: "fc-assinaturas", name: "Assinaturas", type: "despesa", active: true },
-  { id: "fc-salario", name: "Salario", type: "receita", active: true },
-  { id: "fc-outros", name: "Outros", type: "ambos", active: true }
+  { id: "fc-alimentacao", name: "Alimentacao", type: "despesa", active: true, subcategories: ["Mercado", "Restaurante", "Delivery"] },
+  { id: "fc-moradia", name: "Moradia", type: "despesa", active: true, subcategories: ["Luz", "Agua", "Condominio", "Aluguel", "Internet"] },
+  { id: "fc-transporte", name: "Transporte", type: "despesa", active: true, subcategories: ["Combustivel", "Aplicativo", "Manutencao", "Seguro"] },
+  { id: "fc-saude", name: "Saude", type: "despesa", active: true, subcategories: ["Remedios", "Consultas", "Exames", "Plano de saude"] },
+  { id: "fc-educacao", name: "Educacao", type: "despesa", active: true, subcategories: ["Escola", "Cursos", "Material", "Mensalidade"] },
+  { id: "fc-lazer", name: "Lazer", type: "despesa", active: true, subcategories: ["Passeios", "Streaming", "Viagens"] },
+  { id: "fc-assinaturas", name: "Assinaturas", type: "despesa", active: true, subcategories: ["Software", "Streaming", "Clubes"] },
+  { id: "fc-salario", name: "Salario", type: "receita", active: true, subcategories: ["Salario", "Bonus", "Freelance"] },
+  { id: "fc-outros", name: "Outros", type: "ambos", active: true, subcategories: ["Geral"] }
 ];
 
 const seedFinance = {
@@ -168,6 +168,7 @@ const els = {
   transactionType: document.querySelector("#transactionType"),
   transactionAmount: document.querySelector("#transactionAmount"),
   transactionCategory: document.querySelector("#transactionCategory"),
+  transactionSubcategory: document.querySelector("#transactionSubcategory"),
   transactionAccount: document.querySelector("#transactionAccount"),
   transactionCard: document.querySelector("#transactionCard"),
   transactionCompetence: document.querySelector("#transactionCompetence"),
@@ -338,6 +339,10 @@ function bindEvents() {
   });
 
   els.receiptFileInput.addEventListener("change", handleReceiptImport);
+
+  els.transactionCategory.addEventListener("change", () => {
+    renderSubcategoryOptions(els.transactionCategory.value);
+  });
 
   els.voiceTransactionBtn.addEventListener("click", () => {
     openTransactionComposer();
@@ -1090,9 +1095,57 @@ function normalizeFinance(finance) {
 }
 
 function mergeCategories(categories) {
-  const custom = Array.isArray(categories) ? categories : [];
-  const byId = new Map([...FINANCE_CATEGORY_SEEDS, ...custom].map((category) => [category.id, normalizeCategory(category)]));
+  const byId = new Map(FINANCE_CATEGORY_SEEDS.map((category) => [category.id, normalizeCategory(category)]));
+  if (Array.isArray(categories)) {
+    categories.forEach((category) => {
+      const normalized = normalizeCategory(category);
+      const existing = byId.get(normalized.id);
+      byId.set(normalized.id, {
+        ...existing,
+        ...normalized,
+        subcategories: normalized.subcategories.length ? normalized.subcategories : existing?.subcategories || []
+      });
+    });
+  }
   return Array.from(byId.values());
+}
+
+function renderSubcategoryOptions(categoryId, selectedId = "") {
+  const subcategories = getSubcategories(categoryId);
+  els.transactionSubcategory.innerHTML = `<option value="">Subcategoria</option>${subcategories.map((subcategory) => `<option value="${subcategory.id}" ${subcategory.id === selectedId ? "selected" : ""}>${escapeHtml(subcategory.name)}</option>`).join("")}`;
+}
+
+function normalizeSubcategory(subcategory) {
+  if (typeof subcategory === "string") {
+    return { id: slugifySubcategory(subcategory), name: subcategory, active: true };
+  }
+  const name = subcategory?.name || "Subcategoria";
+  return {
+    id: subcategory?.id || slugifySubcategory(name),
+    name,
+    active: subcategory?.active !== false
+  };
+}
+
+function slugifySubcategory(value) {
+  return `fsc-${normalizeText(value).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || createId()}`;
+}
+
+function getSubcategories(categoryId) {
+  const category = getCategory(categoryId);
+  return Array.isArray(category?.subcategories) ? category.subcategories.filter((subcategory) => subcategory.active !== false) : [];
+}
+
+function getSubcategoryName(transaction) {
+  return getSubcategories(transaction.categoryId).find((subcategory) => subcategory.id === transaction.subcategoryId)?.name || "";
+}
+
+function parseSubcategoryList(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map(normalizeSubcategory);
 }
 
 function normalizeAccount(account) {
@@ -1124,7 +1177,8 @@ function normalizeCategory(category) {
     id: category.id || createId(),
     name: category.name || "Categoria",
     type: ["receita", "despesa", "ambos"].includes(category.type) ? category.type : "ambos",
-    active: category.active !== false
+    active: category.active !== false,
+    subcategories: Array.isArray(category.subcategories) ? category.subcategories.map(normalizeSubcategory) : []
   };
 }
 
@@ -1141,6 +1195,7 @@ function normalizeTransaction(transaction) {
     type: transaction.type === "receita" ? "receita" : "despesa",
     amount: Number(transaction.amount || transaction.value || transaction.valor || 0),
     categoryId: transaction.categoryId || "",
+    subcategoryId: transaction.subcategoryId || transaction.subcategory || "",
     accountId: transaction.accountId || "",
     cardId: transaction.cardId || "",
     date: baseDate,
@@ -1169,6 +1224,7 @@ function renderFinance() {
   const submitButton = els.transactionForm?.querySelector("button[type='submit']");
   if (submitButton) submitButton.innerHTML = state.finance.editingTransactionId ? '<i data-lucide="save"></i>Salvar alteracoes' : '<i data-lucide="send"></i>Adicionar';
   if (view === "overview") renderFinanceOverview();
+  if (view === "summary") renderFinanceSummary();
   if (view === "transactions") renderTransactions();
   if (view === "accounts") renderAccounts();
   if (view === "cards") renderCards();
@@ -1185,12 +1241,13 @@ function renderFinanceNav() {
 }
 
 function getFinanceViewTitle(view) {
-  return { overview: "Visao geral", transactions: "Lancamentos", accounts: "Contas", cards: "Cartoes", categories: "Categorias" }[view] || "Minhas Financas";
+  return { overview: "Visao geral", summary: "Resumo", transactions: "Lancamentos", accounts: "Contas", cards: "Cartoes", categories: "Categorias" }[view] || "Minhas Financas";
 }
 
 function renderTransactionOptions() {
   const categories = state.finance.categories.filter((category) => category.active);
   els.transactionCategory.innerHTML = categories.map((category) => `<option value="${category.id}">${escapeHtml(category.name)}</option>`).join("");
+  renderSubcategoryOptions(els.transactionCategory.value, els.transactionSubcategory.value);
   els.transactionAccount.innerHTML = `<option value="">Conta</option>${state.finance.accounts.filter((account) => account.active).map((account) => `<option value="${account.id}">${escapeHtml(account.name)}</option>`).join("")}`;
   els.transactionCard.innerHTML = `<option value="">Cartao</option>${state.finance.cards.filter((card) => card.active).map((card) => `<option value="${card.id}">${escapeHtml(card.name)}</option>`).join("")}`;
   setDefaultTransactionDates(false);
@@ -1213,6 +1270,14 @@ function renderFinanceOverview() {
       <div class="finance-kpi"><span>Lancamentos</span><strong>${summary.monthTransactions.length}</strong></div>
     </section>
     <section class="finance-block"><h2>Lancamentos de ${formatMonthLabel(summary.selectedMonth)}</h2>${renderTransactionRows(summary.monthTransactions)}</section>
+    ${renderFamilyPanel()}`;
+  bindFinanceActions();
+}
+
+function renderFinanceSummary() {
+  const summary = getFinanceSummary();
+  els.financeContent.innerHTML = `
+    ${renderMonthControls(summary)}
     <section class="finance-two-col">
       <div class="finance-block"><h2>Proximos pagamentos</h2>${renderTransactionRows(summary.upcoming)}</div>
       <div class="finance-block"><h2>Ultimos lancamentos</h2>${renderTransactionRows(summary.latest)}</div>
@@ -1343,14 +1408,15 @@ function renderCategories() {
       <form class="mini-form" id="categoryForm">
         <input name="name" placeholder="Nome da categoria" required />
         <select name="type"><option value="despesa">Despesa</option><option value="receita">Receita</option><option value="ambos">Ambos</option></select>
+        <input name="subcategories" placeholder="Subcategorias: Luz, Agua, Condominio" />
         <button type="submit"><i data-lucide="plus"></i>Adicionar</button>
       </form>
-      ${state.finance.categories.map((category) => `<div class="finance-row"><div><strong>${escapeHtml(category.name)}</strong><span>${escapeHtml(category.type)}</span></div><button class="icon-button" data-finance-action="toggle-category" data-id="${category.id}"><i data-lucide="${category.active ? "eye" : "eye-off"}"></i></button></div>`).join("")}
+      ${state.finance.categories.map((category) => `<div class="finance-row"><div><strong>${escapeHtml(category.name)}</strong><span>${escapeHtml(category.type)}${category.subcategories?.length ? ` - ${escapeHtml(category.subcategories.map((item) => item.name).join(", "))}` : ""}</span></div><button class="icon-button" data-finance-action="toggle-category" data-id="${category.id}"><i data-lucide="${category.active ? "eye" : "eye-off"}"></i></button></div>`).join("")}
     </section>`;
   document.querySelector("#categoryForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    createCategory({ name: data.get("name"), type: data.get("type") });
+    createCategory({ name: data.get("name"), type: data.get("type"), subcategories: parseSubcategoryList(data.get("subcategories")) });
     saveAndRender();
   });
   bindFinanceActions();
@@ -1468,6 +1534,7 @@ function collectTransactionForm() {
     type: els.transactionType.checked ? "despesa" : "receita",
     amount: els.transactionAmount.value,
     categoryId: els.transactionCategory.value,
+    subcategoryId: els.transactionSubcategory.value,
     accountId: els.transactionAccount.value,
     cardId: els.transactionCard.value,
     competenceMonth: els.transactionCompetence.value,
@@ -1507,6 +1574,7 @@ function createFinancialTransaction(input) {
       type: input.type,
       amount: input.amount,
       categoryId: input.categoryId,
+      subcategoryId: input.subcategoryId,
       accountId: input.accountId,
       cardId: input.cardId,
       competenceMonth,
@@ -1519,10 +1587,7 @@ function createFinancialTransaction(input) {
       installmentTotal: repeat === "installment" ? totalInstallments : 1,
       intervalDays,
       note: input.note,
-      repeat: input.repeat || transaction.repeat || "single",
-    installmentNumber: Number(input.installmentStart || transaction.installmentNumber || 1),
-    installmentTotal: Number(input.installments || transaction.installmentTotal || 1),
-    paidAt: status === "pago" ? (input.date || dateOnly(new Date().toISOString())) : null,
+      paidAt: status === "pago" ? (input.date || dateOnly(new Date().toISOString())) : null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -1542,6 +1607,7 @@ function updateFinancialTransaction(id, input) {
     type: input.type,
     amount: input.amount,
     categoryId: input.categoryId,
+    subcategoryId: input.subcategoryId,
     accountId: input.accountId,
     cardId: input.cardId,
     competenceMonth: input.competenceMonth || monthKey(input.dueDate || input.date || transaction.competenceMonth),
@@ -1549,10 +1615,7 @@ function updateFinancialTransaction(id, input) {
     dueDate: input.dueDate || transaction.dueDate,
     status: input.status,
     note: input.note,
-    repeat: input.repeat || transaction.repeat || "single",
-    installmentNumber: Number(input.installmentStart || transaction.installmentNumber || 1),
-    installmentTotal: Number(input.installments || transaction.installmentTotal || 1),
-    paidAt: input.status === "pago" ? (input.date || transaction.paidAt || dateOnly(new Date().toISOString())) : null,
+      paidAt: input.status === "pago" ? (input.date || transaction.paidAt || dateOnly(new Date().toISOString())) : null,
     intervalDays: Number(input.intervalDays || transaction.intervalDays || 0),
     updatedAt: new Date().toISOString()
   });
@@ -1576,6 +1639,7 @@ function fillTransactionForm(transaction) {
   els.transactionType.checked = transaction.type !== "receita";
   els.transactionAmount.value = transaction.amount;
   els.transactionCategory.value = transaction.categoryId;
+  renderSubcategoryOptions(transaction.categoryId, transaction.subcategoryId);
   els.transactionAccount.value = transaction.accountId;
   els.transactionCard.value = transaction.cardId;
   els.transactionCompetence.value = transaction.competenceMonth || monthKey(transaction.dueDate || transaction.date);
@@ -1652,7 +1716,8 @@ function getFinanceSummary() {
 function getExpenseBreakdown(transactions) {
   const grouped = new Map();
   transactions.filter((transaction) => transaction.type === "despesa").forEach((transaction) => {
-    const name = getCategory(transaction.categoryId)?.name || "Sem categoria";
+    const subcategoryName = getSubcategoryName(transaction);
+    const name = subcategoryName ? `${getCategory(transaction.categoryId)?.name || "Sem categoria"} / ${subcategoryName}` : getCategory(transaction.categoryId)?.name || "Sem categoria";
     grouped.set(name, (grouped.get(name) || 0) + transaction.amount);
   });
   return Array.from(grouped, ([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount);
@@ -1663,7 +1728,7 @@ function getFilteredTransactions() {
   return state.finance.transactions
     .map(normalizeTransaction)
     .filter((transaction) => transaction.competenceMonth === selectedMonth)
-    .filter((transaction) => !term || normalizeText(`${transaction.description} ${transaction.note} ${getCategory(transaction.categoryId)?.name || ""}`).includes(term))
+    .filter((transaction) => !term || normalizeText(`${transaction.description} ${transaction.note} ${getCategory(transaction.categoryId)?.name || ""} ${getSubcategoryName(transaction)}`).includes(term))
     .sort(compareTransactions);
 }
 
@@ -1672,12 +1737,14 @@ function renderTransactionRows(transactions) {
   return `<div class="finance-list">${transactions.map((item) => {
     const category = getCategory(item.categoryId);
     const repeatLabel = item.repeat === "installment" ? `Parcela ${item.installmentNumber}/${item.installmentTotal}` : item.repeat === "fixed" ? "Fixo mensal" : item.repeat === "interval" ? `A cada ${item.intervalDays || 15} dias` : "Unico";
+    const subcategoryName = getSubcategoryName(item);
+    const categoryLabel = subcategoryName ? `${category?.name || "Sem categoria"} / ${subcategoryName}` : category?.name || "Sem categoria";
     const dateLabel = item.status === "pago" ? `Pago em ${formatDisplayDate(item.paidAt || item.date)}` : `Vence em ${formatDisplayDate(item.dueDate)}`;
     return `
       <div class="finance-row">
         <div>
           <strong>${escapeHtml(item.description)}</strong>
-          <span>${formatDisplayDate(item.dueDate)} - ${escapeHtml(category?.name || "Sem categoria")} - ${escapeHtml(getPaymentName(item))}</span>
+          <span>${formatDisplayDate(item.dueDate)} - ${escapeHtml(categoryLabel)} - ${escapeHtml(getPaymentName(item))}</span>
           <small>${repeatLabel} - Competencia ${formatMonthLabel(item.competenceMonth)} - ${dateLabel}</small>
         </div>
         <div class="transaction-actions">
