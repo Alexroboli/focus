@@ -1193,9 +1193,10 @@ function normalizeCategory(category) {
 }
 
 function normalizeTransaction(transaction) {
-  const baseDate = dateOnly(transaction.date || transaction.data || new Date().toISOString());
-  const baseDueDate = dateOnly(transaction.dueDate || transaction.vencimento || baseDate);
+  const rawDate = dateOnly(transaction.date || transaction.data || new Date().toISOString());
+  const baseDueDate = dateOnly(transaction.dueDate || transaction.vencimento || rawDate);
   const status = transaction.status === "pago" ? "pago" : "pendente";
+  const baseDate = status === "pago" ? rawDate : baseDueDate;
   const repeat = ["single", "fixed", "installment", "interval"].includes(transaction.repeat) ? transaction.repeat : "single";
   const paidAt = status === "pago" ? dateOnly(transaction.paidAt || baseDate) : null;
 
@@ -1625,7 +1626,7 @@ function createFinancialTransaction(input) {
       accountId: input.accountId,
       cardId: input.cardId,
       competenceMonth,
-      date: isFirst ? (input.date || dateOnly(new Date().toISOString())) : dueDate,
+      date: status === "pago" ? (input.date || dueDate) : dueDate,
       dueDate,
       status,
       repeat,
@@ -1658,8 +1659,8 @@ function updateFinancialTransaction(id, input) {
     accountId: input.accountId,
     cardId: input.cardId,
     competenceMonth: input.competenceMonth || monthKey(input.dueDate || input.date || transaction.competenceMonth),
-    date: input.date || transaction.date,
-    dueDate: input.dueDate || transaction.dueDate,
+    date: input.status === "pago" ? (input.date || input.dueDate || transaction.date) : (input.dueDate || input.date || transaction.dueDate),
+    dueDate: input.dueDate || input.date || transaction.dueDate,
     status: input.status,
     repeat: input.repeat || transaction.repeat || "single",
     installmentNumber: Number(input.installmentStart || transaction.installmentNumber || 1),
