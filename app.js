@@ -1200,6 +1200,7 @@ function renderFinanceOverview() {
   const summary = getFinanceSummary();
   els.financeContent.innerHTML = `
     ${renderMonthControls(summary)}
+    ${renderExpensePie(summary)}
     <section class="finance-kpis">
       <div class="finance-kpi"><span>Saldo atual</span><strong>${formatCurrency(summary.balance)}</strong></div>
       <div class="finance-kpi"><span>Receitas previstas</span><strong>${formatCurrency(summary.income)}</strong></div>
@@ -1211,7 +1212,6 @@ function renderFinanceOverview() {
       <div class="finance-kpi"><span>Aberto no mes</span><strong>${formatCurrency(Math.max(0, summary.expenses - summary.paidExpenses))}</strong></div>
       <div class="finance-kpi"><span>Lancamentos</span><strong>${summary.monthTransactions.length}</strong></div>
     </section>
-    ${renderExpensePie(summary)}
     <section class="finance-block"><h2>Lancamentos de ${formatMonthLabel(summary.selectedMonth)}</h2>${renderTransactionRows(summary.monthTransactions)}</section>
     <section class="finance-two-col">
       <div class="finance-block"><h2>Proximos pagamentos</h2>${renderTransactionRows(summary.upcoming)}</div>
@@ -1225,7 +1225,14 @@ function renderExpensePie(summary) {
   const colors = ["#27865f", "#2f6f87", "#86a64b", "#d18b35", "#b23b32", "#6f8f3f", "#596f62", "#8a6f3f"];
   const total = summary.expenseByCategory.reduce((sum, item) => sum + item.amount, 0);
   if (total <= 0) {
-    return `<section class="finance-block expense-dashboard"><h2>Despesas por categoria</h2><p class="empty-copy">Nenhuma despesa no mes.</p></section>`;
+    return `
+      <section class="finance-block expense-dashboard">
+        <h2>Dashboard de despesas</h2>
+        <div class="expense-pie-wrap">
+          <div class="expense-pie empty"><span>R$ 0,00</span></div>
+          <p class="empty-copy">Nenhuma despesa lancada neste mes.</p>
+        </div>
+      </section>`;
   }
 
   let cursor = 0;
@@ -1242,7 +1249,7 @@ function renderExpensePie(summary) {
 
   return `
     <section class="finance-block expense-dashboard">
-      <h2>Despesas por categoria</h2>
+      <h2>Dashboard de despesas</h2>
       <div class="expense-pie-wrap">
         <div class="expense-pie" style="--pie:${gradient}"><span>${formatCurrency(total)}</span></div>
         <div class="pie-legend">${legend}</div>
