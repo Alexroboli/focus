@@ -132,6 +132,15 @@
             <i data-lucide="plus"></i>
             Novo lancamento
           </button>
+          <button class="secondary-action" id="importReceiptBtn" type="button">
+            <i data-lucide="file-up"></i>
+            Importar comprovante
+          </button>
+          <button class="secondary-action" id="voiceTransactionBtn" type="button">
+            <i data-lucide="mic"></i>
+            Lancar por voz
+          </button>
+          <input class="hidden" id="receiptFileInput" type="file" accept="application/pdf,image/*,.txt" />
           <nav class="nav-stack" aria-label="Menus financeiros">
             <button class="nav-item active" type="button" data-finance-view="overview"><i data-lucide="layout-dashboard"></i><span>Visao geral</span><b></b></button>
             <button class="nav-item" type="button" data-finance-view="transactions"><i data-lucide="receipt-text"></i><span>Lancamentos</span><b id="countTransactions">0</b></button>
@@ -273,6 +282,7 @@
             <label class="field-label"><span>Repeticao</span><select id="transactionRepeat"><option value="single">Unico</option><option value="fixed">Fixo mensal</option><option value="installment">Parcelado</option></select></label>
             <label class="field-label"><span>Parcelas</span><input id="transactionInstallments" type="number" min="1" max="480" value="1" placeholder="1" /></label>
             <label class="field-label wide"><span>Observacao</span><input id="transactionNote" type="text" placeholder="Detalhe opcional" /></label>
+            <p class="transaction-assist" id="transactionAssistMessage"></p>
             <button type="submit"><i data-lucide="send"></i>Adicionar</button>
           </form>
         </section>

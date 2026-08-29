@@ -157,6 +157,9 @@ const els = {
   financeWorkspace: document.querySelector("#financeWorkspace"),
   financeNavItems: document.querySelectorAll("[data-finance-view]"),
   newTransactionBtn: document.querySelector("#newTransactionBtn"),
+  importReceiptBtn: document.querySelector("#importReceiptBtn"),
+  voiceTransactionBtn: document.querySelector("#voiceTransactionBtn"),
+  receiptFileInput: document.querySelector("#receiptFileInput"),
   financeTitle: document.querySelector("#financeTitle"),
   financeSearchInput: document.querySelector("#financeSearchInput"),
   financeComposer: document.querySelector("#financeComposer"),
@@ -174,6 +177,7 @@ const els = {
   transactionRepeat: document.querySelector("#transactionRepeat"),
   transactionInstallments: document.querySelector("#transactionInstallments"),
   transactionNote: document.querySelector("#transactionNote"),
+  transactionAssistMessage: document.querySelector("#transactionAssistMessage"),
   financeContent: document.querySelector("#financeContent"),
   countTransactions: document.querySelector("#countTransactions"),
   countAccounts: document.querySelector("#countAccounts"),
@@ -322,12 +326,20 @@ function bindEvents() {
   });
 
   els.newTransactionBtn.addEventListener("click", () => {
-    state.preferences.activeModule = "finance";
-    state.finance.composerOpen = true;
-    state.finance.editingTransactionId = null;
-    resetTransactionForm();
-    saveAndRender();
-    els.transactionDescription.focus();
+    openTransactionComposer();
+  });
+
+  els.importReceiptBtn.addEventListener("click", () => {
+    openTransactionComposer();
+    setTransactionAssistMessage("Selecione um comprovante Pix em PDF, imagem ou texto.");
+    els.receiptFileInput.click();
+  });
+
+  els.receiptFileInput.addEventListener("change", handleReceiptImport);
+
+  els.voiceTransactionBtn.addEventListener("click", () => {
+    openTransactionComposer();
+    startVoiceTransaction();
   });
 
   els.transactionForm.addEventListener("submit", (event) => {
@@ -1305,6 +1317,112 @@ function renderCategories() {
   bindFinanceActions();
 }
 
+function openTransactionComposer() {
+  state.preferences.activeModule = "finance";
+  state.finance.composerOpen = true;
+  state.finance.editingTransactionId = null;
+  resetTransactionForm();
+  saveAndRender();
+  els.transactionDescription.focus();
+}
+
+async function handleReceiptImport() {
+  const file = els.receiptFileInput.files?.[0];
+  if (!file) return;
+  openTransactionComposer();
+  setTransactionAssistMessage(`Lendo ${file.name}...`);
+
+  const text = await extractReceiptText(file);
+  const parsed = parseTransactionText(text || file.name);
+  applyParsedTransaction(parsed, {
+    fallbackDescription: file.name.replace(/\.[^.]+$/, ""),
+    notePrefix: `Importado do comprovante: ${file.name}`
+  });
+
+  if (text) {
+    setTransactionAssistMessage("Comprovante lido. Confira os campos antes de adicionar.");
+  } else {
+    setTransactionAssistMessage("Arquivo anexado ao formulario. Para PDF escaneado ou imagem, confira e complete os campos manualmente.");
+  }
+  els.receiptFileInput.value = "";
+}
+
+async function extractReceiptText(file) {
+  if (file.type.startsWith("image/")) return "";
+  try {
+    const buffer = await file.arrayBuffer();
+    const text = new TextDecoder("latin1").decode(buffer);
+    return text.replace(/[\x00-\x08\x0E-\x1F]+/g, " ");
+  } catch (error) {
+    return "";
+  }
+}
+
+function startVoiceTransaction() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    setTransactionAssistMessage("Este navegador nao tem reconhecimento de voz. Use Chrome ou Edge atualizado.");
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = "pt-BR";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  setTransactionAssistMessage("Ouvindo... fale algo como: despesa mercado 120 reais pago hoje.");
+  recognition.start();
+
+  recognition.onresult = (event) => {
+    const transcript = event.results?.[0]?.[0]?.transcript || "";
+    const parsed = parseTransactionText(transcript);
+    applyParsedTransaction(parsed, { fallbackDescription: transcript, notePrefix: `Lancado por voz: ${transcript}` });
+    setTransactionAssistMessage("Voz reconhecida. Confira os campos antes de adicionar.");
+  };
+  recognition.onerror = () => setTransactionAssistMessage("Nao consegui ouvir com clareza. Tente novamente falando descricao, valor e se esta pago.");
+}
+
+function parseTransactionText(text) {
+  const raw = String(text || "");
+  const normalized = normalizeText(raw);
+  const amountMatch = raw.match(/(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2}|\d+(?:[,.]\d{1,2})?)/i);
+  const amount = amountMatch ? parseMoney(amountMatch[1]) : "";
+  const type = /\b(receita|recebimento|recebi|entrada|salario|pix recebido)\b/.test(normalized) ? "receita" : "despesa";
+  const status = /\b(pago|paguei|quitado|baixado|recebi|recebido)\b/.test(normalized) ? "pago" : "pendente";
+  const date = /\b(hoje|agora)\b/.test(normalized) ? dateOnly(new Date().toISOString()) : "";
+  const description = raw
+    .replace(amountMatch?.[0] || "", "")
+    .replace(/\b(despesa|receita|pagamento|paguei|pago|recebi|recebido|pix|reais|real|hoje|agora)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return { description, amount, type, status, date };
+}
+
+function parseMoney(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const normalized = text.includes(",") ? text.replace(/\./g, "").replace(",", ".") : text;
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number.toFixed(2) : "";
+}
+
+function applyParsedTransaction(parsed, options = {}) {
+  const today = dateOnly(new Date().toISOString());
+  const description = parsed.description || options.fallbackDescription || "Lancamento importado";
+  els.transactionDescription.value = description;
+  if (parsed.amount) els.transactionAmount.value = parsed.amount;
+  els.transactionType.checked = parsed.type !== "receita";
+  els.transactionStatus.value = parsed.status || "pendente";
+  if (parsed.date) els.transactionDate.value = parsed.date;
+  if (!els.transactionDueDate.value) els.transactionDueDate.value = parsed.date || today;
+  if (!els.transactionCompetence.value) els.transactionCompetence.value = monthKey(els.transactionDueDate.value || today);
+  const existingNote = els.transactionNote.value.trim();
+  els.transactionNote.value = [options.notePrefix, existingNote].filter(Boolean).join(" | ");
+}
+
+function setTransactionAssistMessage(message) {
+  if (els.transactionAssistMessage) els.transactionAssistMessage.textContent = message || "";
+}
 function collectTransactionForm() {
   return {
     description: els.transactionDescription.value,
