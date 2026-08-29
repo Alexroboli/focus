@@ -1302,7 +1302,7 @@ svg {
 
 .finance-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-height: 50px;
@@ -1310,6 +1310,53 @@ svg {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
+}
+
+.transaction-select {
+  display: grid;
+  place-items: center;
+  width: 24px;
+}
+
+.transaction-select input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+}
+
+.finance-row.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+.transaction-bulkbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.transaction-bulkbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.transaction-bulkbar span {
+  flex: 1;
+}
+
+.transaction-bulkbar button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
 }
 
 .finance-row strong,

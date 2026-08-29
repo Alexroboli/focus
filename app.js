@@ -357,7 +357,9 @@ function bindEvents() {
     event.preventDefault();
     const input = collectTransactionForm();
     if (state.finance.editingTransactionId) {
-      updateFinancialTransaction(state.finance.editingTransactionId, input);
+      const current = state.finance.transactions.find((item) => item.id === state.finance.editingTransactionId);
+      const applyForward = current?.seriesId && current.repeat !== "single" && window.confirm("Aplicar valor, descricao, categoria e periodo aos lancamentos futuros desta serie?");
+      updateFinancialTransaction(state.finance.editingTransactionId, input, Boolean(applyForward));
     } else {
       createFinancialTransaction(input);
     }
@@ -1646,7 +1648,7 @@ function createFinancialTransaction(input) {
   return created[0] || null;
 }
 
-function updateFinancialTransaction(id, input) {
+function updateFinancialTransaction(id, input, applyForward = false) {
   const transaction = state.finance.transactions.find((item) => item.id === id);
   if (!transaction) return null;
   const next = normalizeTransaction({
@@ -1671,6 +1673,34 @@ function updateFinancialTransaction(id, input) {
     updatedAt: new Date().toISOString()
   });
   Object.assign(transaction, next);
+  if (applyForward && transaction.seriesId) {
+    const future = state.finance.transactions
+      .filter((item) => item.seriesId === transaction.seriesId && item.id !== transaction.id && item.dueDate > transaction.dueDate)
+      .sort(compareTransactions);
+    future.forEach((item, index) => {
+      const dueDate = transaction.repeat === "interval"
+        ? addDaysToDate(transaction.dueDate, (index + 1) * Math.max(1, transaction.intervalDays || 15))
+        : addMonthsToDate(transaction.dueDate, index + 1);
+      Object.assign(item, normalizeTransaction({
+        ...item,
+        description: transaction.description.replace(/\s+\d+\/\d+$/, "") + (transaction.repeat === "installment" ? ` ${item.installmentNumber}/${transaction.installmentTotal}` : ""),
+        type: transaction.type,
+        amount: transaction.amount,
+        categoryId: transaction.categoryId,
+        subcategoryId: transaction.subcategoryId,
+        accountId: transaction.accountId,
+        cardId: transaction.cardId,
+        competenceMonth: transaction.repeat === "interval" ? monthKey(dueDate) : addMonths(transaction.competenceMonth, index + 1),
+        date: item.status === "pago" ? item.date : dueDate,
+        dueDate,
+        repeat: transaction.repeat,
+        installmentTotal: transaction.installmentTotal,
+        intervalDays: transaction.intervalDays,
+        note: transaction.note,
+        updatedAt: new Date().toISOString()
+      }));
+    });
+  }
   return transaction;
 }
 
@@ -1816,14 +1846,23 @@ function getFilteredTransactions() {
 
 function renderTransactionRows(transactions) {
   if (!transactions.length) return `<p class="empty-copy">Nenhum lancamento.</p>`;
-  return `<div class="finance-list">${transactions.map((item) => {
+  const selectedIds = new Set(state.finance.selectedTransactionIds || []);
+  const isTransactionsView = state.finance.activeView === "transactions";
+  const bulkBar = isTransactionsView ? `
+    <div class="transaction-bulkbar">
+      <label><input type="checkbox" data-transaction-select-all /> Selecionar todos</label>
+      <span>${selectedIds.size ? `${selectedIds.size} selecionado(s)` : "Selecione lancamentos para agir em grupo"}</span>
+      <button class="secondary-action" type="button" data-finance-action="bulk-delete-transaction" ${selectedIds.size ? "" : "disabled"}><i data-lucide="trash-2"></i>Excluir selecionados</button>
+    </div>` : "";
+  return `${bulkBar}<div class="finance-list">${transactions.map((item) => {
     const category = getCategory(item.categoryId);
     const repeatLabel = item.repeat === "installment" ? `Parcela ${item.installmentNumber}/${item.installmentTotal}` : item.repeat === "fixed" ? "Fixo mensal" : item.repeat === "interval" ? `A cada ${item.intervalDays || 15} dias` : "Unico";
     const subcategoryName = getSubcategoryName(item);
     const categoryLabel = subcategoryName ? `${category?.name || "Sem categoria"} / ${subcategoryName}` : category?.name || "Sem categoria";
     const dateLabel = item.status === "pago" ? `Pago em ${formatDisplayDate(item.paidAt || item.date)}` : `Vence em ${formatDisplayDate(item.dueDate)}`;
     return `
-      <div class="finance-row">
+      <div class="finance-row ${selectedIds.has(item.id) ? "selected" : ""}">
+        <label class="transaction-select"><input type="checkbox" data-transaction-select="${item.id}" ${selectedIds.has(item.id) ? "checked" : ""} aria-label="Selecionar ${escapeAttr(item.description)}" /></label>
         <div>
           <strong>${escapeHtml(item.description)}</strong>
           <span>${formatDisplayDate(item.dueDate)} - ${escapeHtml(categoryLabel)} - ${escapeHtml(getPaymentName(item))}</span>
@@ -1864,6 +1903,24 @@ function bindFinanceActions() {
     });
   });
 
+  document.querySelectorAll("[data-transaction-select]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const ids = new Set(state.finance.selectedTransactionIds || []);
+      if (input.checked) ids.add(input.dataset.transactionSelect);
+      else ids.delete(input.dataset.transactionSelect);
+      state.finance.selectedTransactionIds = Array.from(ids);
+      renderFinance();
+    });
+  });
+  const selectAll = document.querySelector("[data-transaction-select-all]");
+  if (selectAll) {
+    selectAll.checked = transactionsAreAllSelected();
+    selectAll.addEventListener("change", () => {
+      const visibleIds = getFilteredTransactions().map((item) => item.id);
+      state.finance.selectedTransactionIds = selectAll.checked ? visibleIds : [];
+      renderFinance();
+    });
+  }
   document.querySelectorAll("button[data-finance-action]").forEach((button) => {
     button.addEventListener("click", async () => {
       const action = button.dataset.financeAction;
@@ -1893,14 +1950,15 @@ function bindFinanceActions() {
       if (action === "delete-transaction") {
         const item = state.finance.transactions.find((transaction) => transaction.id === id);
         if (!item) return;
-        const message = `Excluir "${item.description}"? Esta acao nao pode ser desfeita.`;
-        if (!window.confirm(message)) return;
-        state.finance.transactions = state.finance.transactions.filter((transaction) => transaction.id !== id);
+        if (!deleteTransactionsWithScope([id])) return;
         if (state.finance.editingTransactionId === id) {
           state.finance.editingTransactionId = null;
           state.finance.composerOpen = false;
           resetTransactionForm();
         }
+      }
+      if (action === "bulk-delete-transaction") {
+        if (!deleteTransactionsWithScope(state.finance.selectedTransactionIds || [])) return;
       }
       if (action === "toggle-transaction") {
         const item = state.finance.transactions.find((transaction) => transaction.id === id);
@@ -1930,6 +1988,35 @@ function bindFinanceActions() {
   });
 }
 
+function transactionsAreAllSelected() {
+  const visibleIds = getFilteredTransactions().map((item) => item.id);
+  return visibleIds.length > 0 && visibleIds.every((id) => (state.finance.selectedTransactionIds || []).includes(id));
+}
+
+function deleteTransactionsWithScope(ids) {
+  const selected = state.finance.transactions.filter((item) => ids.includes(item.id));
+  if (!selected.length) return false;
+  const hasSeries = selected.some((item) => item.seriesId);
+  let scope = "selected";
+  if (hasSeries) {
+    const answer = window.prompt("Excluir lancamentos:\n1 = somente selecionados\n2 = serie inteira\n3 = selecionados e os proximos da serie", "1");
+    if (answer === null) return false;
+    scope = answer.trim() === "2" ? "series" : answer.trim() === "3" ? "forward" : "selected";
+  } else if (!window.confirm(`Excluir ${selected.length} lancamento(s)? Esta acao nao pode ser desfeita.`)) {
+    return false;
+  }
+  const selectedSet = new Set(ids);
+  state.finance.transactions = state.finance.transactions.filter((item) => {
+    if (selectedSet.has(item.id)) return false;
+    if (!item.seriesId || scope === "selected") return true;
+    const origin = selected.find((entry) => entry.seriesId === item.seriesId);
+    if (!origin) return true;
+    if (scope === "series") return false;
+    return item.dueDate <= origin.dueDate;
+  });
+  state.finance.selectedTransactionIds = [];
+  return true;
+}
 function setDefaultTransactionDates(force = false) {
   const today = dateOnly(new Date().toISOString());
   if (force || !els.transactionCompetence.value) els.transactionCompetence.value = state.finance.activeMonth || monthKey(today);
