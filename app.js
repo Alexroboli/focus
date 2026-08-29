@@ -19,7 +19,8 @@ const DEV_STATUSES = [
   { value: "em_progresso", label: "Em progresso" },
   { value: "dev_teste", label: "Dev teste" },
   { value: "sdx_teste", label: "SDX teste" },
-  { value: "producao", label: "Producao" },
+    { value: "ready_deploy", label: "Ready To Deploy" },
+{ value: "producao", label: "Producao" },
   { value: "finalizado", label: "Finalizado" }
 ];
 
@@ -1189,6 +1190,7 @@ function renderFinanceOverview() {
       <div class="finance-kpi"><span>Receitas previstas</span><strong>${formatCurrency(summary.income)}</strong></div>
       <div class="finance-kpi"><span>Despesas previstas</span><strong>${formatCurrency(summary.expenses)}</strong></div>
       <div class="finance-kpi"><span>Resultado previsto</span><strong class="${summary.result >= 0 ? "positive" : "negative"}">${formatCurrency(summary.result)}</strong></div>
+      <div class="finance-kpi"><span>Saldo previsto acumulado</span><strong class="${summary.projectedBalance >= 0 ? "positive" : "negative"}">${formatCurrency(summary.projectedBalance)}</strong></div>
       <div class="finance-kpi"><span>Recebido no mes</span><strong>${formatCurrency(summary.paidIncome)}</strong></div>
       <div class="finance-kpi"><span>Pago no mes</span><strong>${formatCurrency(summary.paidExpenses)}</strong></div>
       <div class="finance-kpi"><span>Aberto no mes</span><strong>${formatCurrency(Math.max(0, summary.expenses - summary.paidExpenses))}</strong></div>
@@ -1437,6 +1439,9 @@ function getFinanceSummary() {
   const monthTransactions = transactions.filter((transaction) => transaction.competenceMonth === selectedMonth).sort(compareTransactions);
   const paidUntilToday = transactions.filter((transaction) => transaction.status === "pago" && (transaction.paidAt || transaction.date) <= today);
   const paidInMonth = monthTransactions.filter((transaction) => transaction.status === "pago");
+  const projectedUntilMonth = transactions.filter((transaction) => (transaction.competenceMonth || monthKey(transaction.dueDate || transaction.date)) <= selectedMonth);
+  const projectedIncome = projectedUntilMonth.filter((transaction) => transaction.type === "receita").reduce((sum, transaction) => sum + transaction.amount, 0);
+  const projectedExpenses = projectedUntilMonth.filter((transaction) => transaction.type === "despesa").reduce((sum, transaction) => sum + transaction.amount, 0);
   const upcoming = transactions
     .filter((transaction) => transaction.status !== "pago" && transaction.dueDate >= today)
     .sort(compareTransactions)
@@ -1458,6 +1463,7 @@ function getFinanceSummary() {
     upcoming,
     latest,
     balance: baseBalance + paidIncomeAll - paidExpensesAll,
+    projectedBalance: baseBalance + projectedIncome - projectedExpenses,
     income,
     expenses,
     result: income - expenses,
