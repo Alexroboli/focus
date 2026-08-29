@@ -269,8 +269,8 @@
 
         <section class="finance-composer hidden" id="financeComposer">
           <form id="transactionForm">
-            <label class="field-label"><span>Descricao</span><input id="transactionDescription" type="text" placeholder="Ex: Financiamento Caixa" required /></label>
             <label class="transaction-kind"><span>Tipo</span><strong><input id="transactionType" type="checkbox" checked /> Despesa</strong><small>Desmarcado = receita</small></label>
+            <label class="field-label"><span>Descricao</span><input id="transactionDescription" type="text" placeholder="Ex: Financiamento Caixa" required /></label>
             <label class="field-label"><span>Valor</span><input id="transactionAmount" type="number" min="0" step="0.01" placeholder="0,00" required /></label>
             <label class="field-label"><span>Categoria</span><select id="transactionCategory"></select></label>
             <label class="field-label"><span>Conta</span><select id="transactionAccount"></select></label>
@@ -279,8 +279,10 @@
             <label class="field-label"><span>Data de baixa</span><input id="transactionDate" type="date" /></label>
             <label class="field-label"><span>Vencimento</span><input id="transactionDueDate" type="date" /></label>
             <label class="field-label"><span>Status</span><select id="transactionStatus"><option value="pendente">Pendente</option><option value="pago">Pago</option></select></label>
-            <label class="field-label"><span>Repeticao</span><select id="transactionRepeat"><option value="single">Unico</option><option value="fixed">Fixo mensal</option><option value="installment">Parcelado</option></select></label>
-            <label class="field-label"><span>Parcelas</span><input id="transactionInstallments" type="number" min="1" max="480" value="1" placeholder="1" /></label>
+            <label class="field-label"><span>Repeticao</span><select id="transactionRepeat"><option value="single">Unico</option><option value="fixed">Fixo mensal</option><option value="installment">Parcelado</option><option value="interval">Fixo por periodo</option></select></label>
+            <label class="field-label"><span>Parcela inicial</span><input id="transactionInstallmentStart" type="number" min="1" max="480" value="1" placeholder="1" /></label>
+            <label class="field-label"><span>Total parcelas</span><input id="transactionInstallments" type="number" min="1" max="480" value="1" placeholder="10" /></label>
+            <label class="field-label"><span>Periodo dias</span><input id="transactionIntervalDays" type="number" min="1" max="365" value="15" placeholder="15" /></label>
             <label class="field-label wide"><span>Observacao</span><input id="transactionNote" type="text" placeholder="Detalhe opcional" /></label>
             <p class="transaction-assist" id="transactionAssistMessage"></p>
             <button type="submit"><i data-lucide="send"></i>Adicionar</button>

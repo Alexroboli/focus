@@ -175,7 +175,9 @@ const els = {
   transactionDueDate: document.querySelector("#transactionDueDate"),
   transactionStatus: document.querySelector("#transactionStatus"),
   transactionRepeat: document.querySelector("#transactionRepeat"),
+  transactionInstallmentStart: document.querySelector("#transactionInstallmentStart"),
   transactionInstallments: document.querySelector("#transactionInstallments"),
+  transactionIntervalDays: document.querySelector("#transactionIntervalDays"),
   transactionNote: document.querySelector("#transactionNote"),
   transactionAssistMessage: document.querySelector("#transactionAssistMessage"),
   financeContent: document.querySelector("#financeContent"),
@@ -1130,7 +1132,7 @@ function normalizeTransaction(transaction) {
   const baseDate = dateOnly(transaction.date || transaction.data || new Date().toISOString());
   const baseDueDate = dateOnly(transaction.dueDate || transaction.vencimento || baseDate);
   const status = transaction.status === "pago" ? "pago" : "pendente";
-  const repeat = ["single", "fixed", "installment"].includes(transaction.repeat) ? transaction.repeat : "single";
+  const repeat = ["single", "fixed", "installment", "interval"].includes(transaction.repeat) ? transaction.repeat : "single";
   const paidAt = status === "pago" ? dateOnly(transaction.paidAt || baseDate) : null;
 
   return {
@@ -1149,6 +1151,7 @@ function normalizeTransaction(transaction) {
     seriesId: transaction.seriesId || null,
     installmentNumber: Number(transaction.installmentNumber || 1),
     installmentTotal: Number(transaction.installmentTotal || 1),
+    intervalDays: Number(transaction.intervalDays || 0),
     note: transaction.note || transaction.observacao || "",
     createdAt: transaction.createdAt || new Date().toISOString(),
     updatedAt: transaction.updatedAt || transaction.createdAt || new Date().toISOString(),
@@ -1208,6 +1211,7 @@ function renderFinanceOverview() {
       <div class="finance-kpi"><span>Aberto no mes</span><strong>${formatCurrency(Math.max(0, summary.expenses - summary.paidExpenses))}</strong></div>
       <div class="finance-kpi"><span>Lancamentos</span><strong>${summary.monthTransactions.length}</strong></div>
     </section>
+    ${renderExpensePie(summary)}
     <section class="finance-block"><h2>Lancamentos de ${formatMonthLabel(summary.selectedMonth)}</h2>${renderTransactionRows(summary.monthTransactions)}</section>
     <section class="finance-two-col">
       <div class="finance-block"><h2>Proximos pagamentos</h2>${renderTransactionRows(summary.upcoming)}</div>
@@ -1217,6 +1221,34 @@ function renderFinanceOverview() {
   bindFinanceActions();
 }
 
+function renderExpensePie(summary) {
+  const colors = ["#27865f", "#2f6f87", "#86a64b", "#d18b35", "#b23b32", "#6f8f3f", "#596f62", "#8a6f3f"];
+  const total = summary.expenseByCategory.reduce((sum, item) => sum + item.amount, 0);
+  if (total <= 0) {
+    return `<section class="finance-block expense-dashboard"><h2>Despesas por categoria</h2><p class="empty-copy">Nenhuma despesa no mes.</p></section>`;
+  }
+
+  let cursor = 0;
+  const gradient = summary.expenseByCategory.map((item, index) => {
+    const start = cursor;
+    cursor += (item.amount / total) * 100;
+    return `${colors[index % colors.length]} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+  }).join(", ");
+
+  const legend = summary.expenseByCategory.map((item, index) => {
+    const percentage = ((item.amount / total) * 100).toFixed(1).replace(".", ",");
+    return `<div class="pie-legend-row"><i style="background:${colors[index % colors.length]}"></i><span>${escapeHtml(item.name)}</span><strong>${formatCurrency(item.amount)}</strong><small>${percentage}%</small></div>`;
+  }).join("");
+
+  return `
+    <section class="finance-block expense-dashboard">
+      <h2>Despesas por categoria</h2>
+      <div class="expense-pie-wrap">
+        <div class="expense-pie" style="--pie:${gradient}"><span>${formatCurrency(total)}</span></div>
+        <div class="pie-legend">${legend}</div>
+      </div>
+    </section>`;
+}
 function renderMonthControls(summary) {
   return `
     <section class="month-toolbar">
@@ -1436,14 +1468,19 @@ function collectTransactionForm() {
     dueDate: els.transactionDueDate.value,
     status: els.transactionStatus.value,
     repeat: els.transactionRepeat.value,
+    installmentStart: els.transactionInstallmentStart.value,
     installments: els.transactionInstallments.value,
+    intervalDays: els.transactionIntervalDays.value,
     note: els.transactionNote.value
   };
 }
 
 function createFinancialTransaction(input) {
-  const repeat = input.repeat === "fixed" ? "fixed" : input.repeat === "installment" ? "installment" : "single";
-  const total = repeat === "fixed" ? 24 : repeat === "installment" ? Math.max(1, Math.min(480, Number(input.installments || 1))) : 1;
+  const repeat = ["fixed", "installment", "interval"].includes(input.repeat) ? input.repeat : "single";
+  const totalInstallments = Math.max(1, Math.min(480, Number(input.installments || 1)));
+  const installmentStart = repeat === "installment" ? Math.max(1, Math.min(totalInstallments, Number(input.installmentStart || 1))) : 1;
+  const intervalDays = repeat === "interval" ? Math.max(1, Math.min(365, Number(input.intervalDays || 15))) : 0;
+  const total = repeat === "fixed" || repeat === "interval" ? 24 : repeat === "installment" ? totalInstallments - installmentStart + 1 : 1;
   const seriesId = repeat === "single" ? null : createId();
   const baseCompetence = input.competenceMonth || monthKey(input.dueDate || input.date || new Date());
   const baseDueDate = input.dueDate || firstDayOfMonth(baseCompetence);
@@ -1451,9 +1488,10 @@ function createFinancialTransaction(input) {
   const created = [];
 
   for (let index = 0; index < total; index += 1) {
-    const competenceMonth = addMonths(baseCompetence, index);
-    const dueDate = addMonthsToDate(baseDueDate, index);
-    const label = repeat === "installment" ? ` ${index + 1}/${total}` : "";
+    const installmentNumber = repeat === "installment" ? installmentStart + index : 1;
+    const dueDate = repeat === "interval" ? addDaysToDate(baseDueDate, index * intervalDays) : addMonthsToDate(baseDueDate, index);
+    const competenceMonth = repeat === "interval" ? monthKey(dueDate) : addMonths(baseCompetence, index);
+    const label = repeat === "installment" ? ` ${installmentNumber}/${totalInstallments}` : "";
     const isFirst = index === 0;
     const status = isFirst ? input.status : "pendente";
     const transaction = normalizeTransaction({
@@ -1470,10 +1508,14 @@ function createFinancialTransaction(input) {
       status,
       repeat,
       seriesId,
-      installmentNumber: repeat === "installment" ? index + 1 : 1,
-      installmentTotal: repeat === "installment" ? total : 1,
+      installmentNumber,
+      installmentTotal: repeat === "installment" ? totalInstallments : 1,
+      intervalDays,
       note: input.note,
-      paidAt: status === "pago" ? (input.date || dateOnly(new Date().toISOString())) : null,
+      repeat: input.repeat || transaction.repeat || "single",
+    installmentNumber: Number(input.installmentStart || transaction.installmentNumber || 1),
+    installmentTotal: Number(input.installments || transaction.installmentTotal || 1),
+    paidAt: status === "pago" ? (input.date || dateOnly(new Date().toISOString())) : null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -1500,7 +1542,11 @@ function updateFinancialTransaction(id, input) {
     dueDate: input.dueDate || transaction.dueDate,
     status: input.status,
     note: input.note,
+    repeat: input.repeat || transaction.repeat || "single",
+    installmentNumber: Number(input.installmentStart || transaction.installmentNumber || 1),
+    installmentTotal: Number(input.installments || transaction.installmentTotal || 1),
     paidAt: input.status === "pago" ? (input.date || transaction.paidAt || dateOnly(new Date().toISOString())) : null,
+    intervalDays: Number(input.intervalDays || transaction.intervalDays || 0),
     updatedAt: new Date().toISOString()
   });
   Object.assign(transaction, next);
@@ -1510,7 +1556,9 @@ function updateFinancialTransaction(id, input) {
 function resetTransactionForm() {
   els.transactionForm.reset();
   els.transactionType.checked = true;
+  els.transactionInstallmentStart.value = "1";
   els.transactionInstallments.value = "1";
+  els.transactionIntervalDays.value = "15";
   els.transactionRepeat.value = "single";
   state.finance.editingTransactionId = null;
   setDefaultTransactionDates(true);
@@ -1528,7 +1576,9 @@ function fillTransactionForm(transaction) {
   els.transactionDueDate.value = transaction.dueDate || dateOnly(new Date().toISOString());
   els.transactionStatus.value = transaction.status;
   els.transactionRepeat.value = transaction.repeat || "single";
+  els.transactionInstallmentStart.value = transaction.installmentNumber || "1";
   els.transactionInstallments.value = transaction.installmentTotal || "1";
+  els.transactionIntervalDays.value = transaction.intervalDays || "15";
   els.transactionNote.value = transaction.note || "";
 }
 
@@ -1574,6 +1624,7 @@ function getFinanceSummary() {
   const expenses = monthTransactions.filter((transaction) => transaction.type === "despesa").reduce((sum, transaction) => sum + transaction.amount, 0);
   const paidIncome = paidInMonth.filter((transaction) => transaction.type === "receita").reduce((sum, transaction) => sum + transaction.amount, 0);
   const paidExpenses = paidInMonth.filter((transaction) => transaction.type === "despesa").reduce((sum, transaction) => sum + transaction.amount, 0);
+  const expenseByCategory = getExpenseBreakdown(monthTransactions);
 
   return {
     selectedMonth,
@@ -1586,10 +1637,19 @@ function getFinanceSummary() {
     expenses,
     result: income - expenses,
     paidIncome,
-    paidExpenses
+    paidExpenses,
+    expenseByCategory
   };
 }
 
+function getExpenseBreakdown(transactions) {
+  const grouped = new Map();
+  transactions.filter((transaction) => transaction.type === "despesa").forEach((transaction) => {
+    const name = getCategory(transaction.categoryId)?.name || "Sem categoria";
+    grouped.set(name, (grouped.get(name) || 0) + transaction.amount);
+  });
+  return Array.from(grouped, ([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount);
+}
 function getFilteredTransactions() {
   const term = normalizeText(els.financeSearchInput.value);
   const selectedMonth = state.finance.activeMonth || monthKey(new Date());
@@ -1604,7 +1664,7 @@ function renderTransactionRows(transactions) {
   if (!transactions.length) return `<p class="empty-copy">Nenhum lancamento.</p>`;
   return `<div class="finance-list">${transactions.map((item) => {
     const category = getCategory(item.categoryId);
-    const repeatLabel = item.repeat === "installment" ? `Parcela ${item.installmentNumber}/${item.installmentTotal}` : item.repeat === "fixed" ? "Fixo mensal" : "Unico";
+    const repeatLabel = item.repeat === "installment" ? `Parcela ${item.installmentNumber}/${item.installmentTotal}` : item.repeat === "fixed" ? "Fixo mensal" : item.repeat === "interval" ? `A cada ${item.intervalDays || 15} dias` : "Unico";
     const dateLabel = item.status === "pago" ? `Pago em ${formatDisplayDate(item.paidAt || item.date)}` : `Vence em ${formatDisplayDate(item.dueDate)}`;
     return `
       <div class="finance-row">
@@ -1745,6 +1805,12 @@ function addMonthsToDate(value, amount) {
   return dateOnly(target.toISOString());
 }
 
+function addDaysToDate(value, amount) {
+  const source = /^\d{4}-\d{2}-\d{2}/.test(String(value)) ? String(value).slice(0, 10) : dateOnly(new Date().toISOString());
+  const [year, monthNumber, day] = source.split("-").map(Number);
+  const target = new Date(year, monthNumber - 1, day + amount);
+  return dateOnly(target.toISOString());
+}
 function formatMonthLabel(month) {
   const [year, monthNumber] = monthKey(month).split("-").map(Number);
   return new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(year, monthNumber - 1, 1));
