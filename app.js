@@ -25,8 +25,8 @@ const DEV_STATUSES = [
 ];
 
 const FINANCE_CATEGORY_SEEDS = [
-  { id: "fc-alimentacao", name: "Alimentacao", type: "despesa", active: true, subcategories: ["Mercado", "Restaurante", "Delivery"] },
-  { id: "fc-moradia", name: "Moradia", type: "despesa", active: true, subcategories: ["Luz", "Agua", "Condominio", "Aluguel", "Internet"] },
+  { id: "fc-alimentacao", name: "Alimentacao", type: "despesa", active: true, subcategories: ["Mercado", "Restaurante", "Delivery", "Ifood"] },
+  { id: "fc-moradia", name: "Moradia", type: "despesa", active: true, subcategories: ["Luz", "Agua", "Condominio", "Aluguel", "Internet", "Supermercardo"] },
   { id: "fc-transporte", name: "Transporte", type: "despesa", active: true, subcategories: ["Uber", "Posto", "Combustivel", "Aplicativo", "Manutencao", "Seguro"] },
   { id: "fc-saude", name: "Saude", type: "despesa", active: true, subcategories: ["Remedios", "Consultas", "Exames", "Plano de saude"] },
   { id: "fc-educacao", name: "Educacao", type: "despesa", active: true, subcategories: ["Escola", "Cursos", "Material", "Mensalidade"] },
@@ -1762,7 +1762,11 @@ function applyTransactionSuggestion() {
     ? { categoryId: "fc-transporte", subcategory: "uber", subcategoryName: "Uber" }
     : ["posto", "gasolina", "combustivel"].some((word) => term.includes(word))
       ? { categoryId: "fc-transporte", subcategory: "posto", subcategoryName: "Posto" }
-      : null;
+      : term.includes("ifood")
+        ? { categoryId: "fc-alimentacao", subcategory: "delivery", subcategoryName: "Delivery" }
+        : ["supermercado", "supermercador", "mercado"].some((word) => term.includes(word))
+          ? { categoryId: "fc-alimentacao", subcategory: "mercado", subcategoryName: "Mercado" }
+          : null;
   if (!suggestion) return;
   els.transactionCategory.value = suggestion.categoryId;
   const category = getCategory(suggestion.categoryId);
