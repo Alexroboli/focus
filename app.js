@@ -42,7 +42,7 @@ const seedFinance = {
   activeMonth: monthKey(new Date()),
   composerOpen: false,
   editingTransactionId: null,
-  accounts: [{ id: "fa-carteira", name: "Carteira", type: "Dinheiro", initialBalance: 0, active: true, createdAt: new Date().toISOString() }],
+  accounts: [{ id: "fa-carteira", name: "Conta Corrente Alexandre", type: "Conta corrente", initialBalance: 710.26, active: true, createdAt: new Date().toISOString() }],
   cards: [],
   categories: FINANCE_CATEGORY_SEEDS,
   transactions: []
@@ -849,7 +849,9 @@ async function loadRemoteState() {
   const response = await requestJson(API_STATE);
   if (!response.ok) return false;
   currentSession = response.session || null;
+  const hadOpeningAccountMigration = response.data?.finance?.migrations?.openingAccountV1 === true;
   state = normalizeState(response.data);
+  if (!hadOpeningAccountMigration) saveState();
   await loadMembers();
   return true;
 }
@@ -897,6 +899,11 @@ function normalizeState(nextState) {
     tasks: Array.isArray(nextState?.tasks) ? nextState.tasks : seedState.tasks,
     activity: Array.isArray(nextState?.activity) ? nextState.activity : []
   };
+  merged.finance = {
+    ...structuredClone(seedFinance),
+    ...(nextState?.finance || {})
+  };
+  migrateFinanceOpeningAccount(merged.finance);
   merged.dateRange = {
     from: nextState?.dateRange?.from || "",
     to: nextState?.dateRange?.to || ""
@@ -904,6 +911,33 @@ function normalizeState(nextState) {
   merged.expandedDateGroups = nextState?.expandedDateGroups || {};
   merged.tasks = merged.tasks.map(normalizeTask);
   return merged;
+}
+
+function migrateFinanceOpeningAccount(finance) {
+  if (finance.migrations?.openingAccountV1) return;
+  const accounts = Array.isArray(finance.accounts) ? finance.accounts : [];
+  let account = accounts.find((item) => normalizeText(item.name) === "conta corrente alexandre");
+  if (!account) {
+    account = accounts.find((item) => ["carteira", "conta corrente"].includes(normalizeText(item.name))) || {
+      id: "fa-conta-corrente-alexandre",
+      name: "Conta Corrente Alexandre",
+      type: "Conta corrente",
+      initialBalance: 710.26,
+      active: true,
+      createdAt: new Date().toISOString()
+    };
+    if (!accounts.some((item) => item.id === account.id)) accounts.push(account);
+  }
+  account.name = "Conta Corrente Alexandre";
+  account.type = "Conta corrente";
+  account.initialBalance = 710.26;
+  account.active = true;
+  finance.accounts = accounts;
+  finance.transactions = (Array.isArray(finance.transactions) ? finance.transactions : []).map((transaction) => ({
+    ...transaction,
+    accountId: account.id
+  }));
+  finance.migrations = { ...(finance.migrations || {}), openingAccountV1: true };
 }
 
 function normalizeTask(task) {
