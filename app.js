@@ -1893,7 +1893,8 @@ function removeSubcategoryFromCategory(categoryId, subcategoryId) {
 }
 
 function isFinanceTransactionInScope(transaction) {
-  return String(transaction.competenceMonth || monthKey(transaction.dueDate || transaction.date)) >= FINANCE_START_MONTH;
+  const referenceDate = String(transaction.dueDate || transaction.date || "").slice(0, 10);
+  return referenceDate >= `${FINANCE_START_MONTH}-01`;
 }
 
 function getFinanceSummary() {
@@ -1916,6 +1917,7 @@ function getFinanceSummary() {
   const baseBalance = state.finance.accounts.filter((account) => account.active).reduce((sum, account) => sum + Number(account.initialBalance || 0), 0);
   const paidIncomeAll = paidUntilToday.filter((transaction) => transaction.type === "receita").reduce((sum, transaction) => sum + transaction.amount, 0);
   const paidExpensesAll = paidUntilToday.filter((transaction) => transaction.type === "despesa").reduce((sum, transaction) => sum + transaction.amount, 0);
+  const beforeFinanceStart = selectedMonth < FINANCE_START_MONTH;
   const income = monthTransactions.filter((transaction) => transaction.type === "receita").reduce((sum, transaction) => sum + transaction.amount, 0);
   const expenses = monthTransactions.filter((transaction) => transaction.type === "despesa").reduce((sum, transaction) => sum + transaction.amount, 0);
   const paidIncome = paidInMonth.filter((transaction) => transaction.type === "receita").reduce((sum, transaction) => sum + transaction.amount, 0);
@@ -1927,13 +1929,13 @@ function getFinanceSummary() {
     monthTransactions,
     upcoming,
     latest,
-    balance: baseBalance + paidIncomeAll - paidExpensesAll,
-    projectedBalance: baseBalance + projectedIncome - projectedExpenses,
-    income,
-    expenses,
-    result: income - expenses,
-    paidIncome,
-    paidExpenses,
+    balance: beforeFinanceStart ? 0 : baseBalance + paidIncomeAll - paidExpensesAll,
+    projectedBalance: beforeFinanceStart ? 0 : baseBalance + projectedIncome - projectedExpenses,
+    income: beforeFinanceStart ? 0 : income,
+    expenses: beforeFinanceStart ? 0 : expenses,
+    result: beforeFinanceStart ? 0 : income - expenses,
+    paidIncome: beforeFinanceStart ? 0 : paidIncome,
+    paidExpenses: beforeFinanceStart ? 0 : paidExpenses,
     expenseByCategory
   };
 }
