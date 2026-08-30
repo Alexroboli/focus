@@ -7,6 +7,7 @@ const API_INVITE_ACCEPT = "/api/invites/accept";
 const API_RECOVERY_RESET = "/api/recovery/reset";
 const API_MEMBERS = "/api/members";
 const API_INVITES = "/api/invites";
+const FINANCE_START_MONTH = "2026-08";
 
 const STANDARD_STATUSES = [
   { value: "pendente", label: "Pendente" },
@@ -1251,7 +1252,7 @@ function renderFinance() {
 
 function renderFinanceNav() {
   els.financeNavItems.forEach((button) => button.classList.toggle("active", button.dataset.financeView === state.finance.activeView));
-  els.countTransactions.textContent = state.finance.transactions.length;
+  els.countTransactions.textContent = state.finance.transactions.map(normalizeTransaction).filter(isFinanceTransactionInScope).length;
   els.countAccounts.textContent = state.finance.accounts.filter((account) => account.active).length;
   els.countCards.textContent = state.finance.cards.filter((card) => card.active).length;
   els.countCategories.textContent = state.finance.categories.filter((category) => category.active).length;
@@ -1891,10 +1892,14 @@ function removeSubcategoryFromCategory(categoryId, subcategoryId) {
   category.subcategories = getSubcategories(category.id).filter((subcategory) => subcategory.id !== subcategoryId);
 }
 
+function isFinanceTransactionInScope(transaction) {
+  return String(transaction.competenceMonth || monthKey(transaction.dueDate || transaction.date)) >= FINANCE_START_MONTH;
+}
+
 function getFinanceSummary() {
   const selectedMonth = state.finance.activeMonth || monthKey(new Date());
   const today = dateOnly(new Date().toISOString());
-  const transactions = state.finance.transactions.map(normalizeTransaction);
+  const transactions = state.finance.transactions.map(normalizeTransaction).filter(isFinanceTransactionInScope)
   const monthTransactions = transactions.filter((transaction) => transaction.competenceMonth === selectedMonth).sort(compareTransactions);
   const paidUntilToday = transactions.filter((transaction) => transaction.status === "pago" && (transaction.paidAt || transaction.date) <= today);
   const paidInMonth = monthTransactions.filter((transaction) => transaction.status === "pago");
@@ -1947,6 +1952,7 @@ function getFilteredTransactions() {
   const selectedMonth = state.finance.activeMonth || monthKey(new Date());
   return state.finance.transactions
     .map(normalizeTransaction)
+    .filter(isFinanceTransactionInScope)
     .filter((transaction) => transaction.competenceMonth === selectedMonth)
     .filter((transaction) => !term || normalizeText(`${transaction.description} ${transaction.note} ${getCategory(transaction.categoryId)?.name || ""} ${getSubcategoryName(transaction)}`).includes(term))
     .sort(compareTransactions);
