@@ -1764,8 +1764,8 @@ function applyTransactionSuggestion() {
       ? { categoryId: "fc-transporte", subcategory: "posto", subcategoryName: "Posto" }
       : term.includes("ifood")
         ? { categoryId: "fc-alimentacao", subcategory: "ifood", subcategoryName: "Ifood" }
-        : ["supermercado", "supermercador", "mercado"].some((word) => term.includes(word))
-          ? { categoryId: "fc-alimentacao", subcategory: "mercado", subcategoryName: "Mercado" }
+        : ["supermercado", "supermercador", "mercado", " bh ", "bh"].some((word) => term.includes(word))
+          ? { categoryId: "fc-moradia", subcategory: "supermercado", subcategoryName: "Supermercado" }
           : null;
   if (!suggestion) return;
   els.transactionCategory.value = suggestion.categoryId;
