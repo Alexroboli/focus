@@ -1220,6 +1220,7 @@ function normalizeTransaction(transaction) {
     status,
     repeat,
     seriesId: transaction.seriesId || null,
+    externalId: transaction.externalId || transaction.fitid || null,
     installmentNumber: Number(transaction.installmentNumber || 1),
     installmentTotal: Number(transaction.installmentTotal || 1),
     intervalDays: Number(transaction.intervalDays || 0),
@@ -1491,6 +1492,15 @@ async function handleReceiptImport() {
   setTransactionAssistMessage(`Lendo ${file.name}...`);
 
   const text = await extractReceiptText(file);
+  if (/\.ofx$/i.test(file.name)) {
+    const result = importOfxTransactions(text, "2026-08");
+    state.finance.composerOpen = false;
+    els.receiptFileInput.value = "";
+    setTransactionAssistMessage(`OFX importado: ${result.added} lancamento(s) adicionado(s), ${result.skipped} duplicado(s) ignorado(s).`);
+    saveAndRender();
+    return;
+  }
+
   const parsed = parseTransactionText(text || file.name);
   applyParsedTransaction(parsed, {
     fallbackDescription: file.name.replace(/\.[^.]+$/, ""),
@@ -1505,6 +1515,77 @@ async function handleReceiptImport() {
   els.receiptFileInput.value = "";
 }
 
+function importOfxTransactions(text, competenceMonth) {
+  const blocks = String(text || "").match(/<STMTTRN>[\s\S]*?<\/STMTTRN>/gi) || [];
+  let added = 0;
+  let skipped = 0;
+  blocks.forEach((block) => {
+    const fitid = readOfxTag(block, "FITID");
+    if (!fitid || state.finance.transactions.some((item) => item.externalId === fitid)) {
+      skipped += 1;
+      return;
+    }
+    const posted = readOfxTag(block, "DTPOSTED").slice(0, 8);
+    const date = /^\d{8}$/.test(posted) ? `${posted.slice(0, 4)}-${posted.slice(4, 6)}-${posted.slice(6, 8)}` : dateOnly(new Date().toISOString());
+    const amountText = readOfxTag(block, "TRNAMT").replace(/\./g, "").replace(",", ".");
+    const signedAmount = Number(amountText);
+    if (!Number.isFinite(signedAmount) || signedAmount === 0) return;
+    const memo = readOfxTag(block, "MEMO") || "Lancamento OFX";
+    const type = signedAmount >= 0 ? "receita" : "despesa";
+    const suggestion = getImportedSuggestion(memo);
+    createFinancialTransaction({
+      description: cleanOfxDescription(memo),
+      type,
+      amount: Math.abs(signedAmount).toFixed(2),
+      categoryId: suggestion?.categoryId || "fc-outros",
+      subcategoryId: suggestion?.subcategoryId || "",
+      accountId: "",
+      cardId: "",
+      competenceMonth,
+      date,
+      dueDate: date,
+      status: "pago",
+      repeat: "single",
+      installments: "1",
+      installmentStart: "1",
+      intervalDays: "0",
+      note: `Importado do OFX: ${memo}`,
+      externalId: fitid
+    });
+    const created = state.finance.transactions.find((item) => item.externalId === fitid);
+    if (created) added += 1;
+  });
+  return { added, skipped };
+}
+
+function readOfxTag(block, tag) {
+  const match = String(block || "").match(new RegExp(`<${tag}>([^<\\r\\n]*)`, "i"));
+  return match ? match[1].trim() : "";
+}
+
+function cleanOfxDescription(value) {
+  return String(value || "Lancamento OFX")
+    .replace(/^Pix (Enviado|Recebido)\s+/i, "")
+    .replace(/^Pagamento De Boleto Outros Bancos\s+/i, "")
+    .replace(/^Ted Recebida\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim() || "Lancamento OFX";
+}
+
+function getImportedSuggestion(description) {
+  const term = normalizeText(description);
+  if (term.includes("uber")) return { categoryId: "fc-transporte", subcategoryId: findSubcategoryId("fc-transporte", "uber") };
+  if (term.includes("posto") || term.includes("gasolina") || term.includes("combustivel")) return { categoryId: "fc-transporte", subcategoryId: findSubcategoryId("fc-transporte", "posto") };
+  if (term.includes("ifood")) return { categoryId: "fc-alimentacao", subcategoryId: findSubcategoryId("fc-alimentacao", "ifood") };
+  if (term.includes("supermercado") || term.includes("mercado") || term.includes(" bh ") || term === "bh") return { categoryId: "fc-moradia", subcategoryId: findSubcategoryId("fc-moradia", "supermercado") };
+  if (term.includes("cemig")) return { categoryId: "fc-moradia", subcategoryId: findSubcategoryId("fc-moradia", "luz") };
+  if (term.includes("condominio")) return { categoryId: "fc-moradia", subcategoryId: findSubcategoryId("fc-moradia", "condominio") };
+  return null;
+}
+
+function findSubcategoryId(categoryId, name) {
+  return getSubcategories(categoryId).find((item) => normalizeText(item.name) === name)?.id || "";
+}
 async function extractReceiptText(file) {
   if (file.type.startsWith("image/")) return "";
   try {
@@ -1636,6 +1717,7 @@ function createFinancialTransaction(input) {
       status,
       repeat,
       seriesId,
+      externalId: input.externalId || null,
       installmentNumber,
       installmentTotal: repeat === "installment" ? totalInstallments : 1,
       intervalDays,
