@@ -27,7 +27,7 @@ const DEV_STATUSES = [
 const FINANCE_CATEGORY_SEEDS = [
   { id: "fc-alimentacao", name: "Alimentacao", type: "despesa", active: true, subcategories: ["Mercado", "Restaurante", "Delivery"] },
   { id: "fc-moradia", name: "Moradia", type: "despesa", active: true, subcategories: ["Luz", "Agua", "Condominio", "Aluguel", "Internet"] },
-  { id: "fc-transporte", name: "Transporte", type: "despesa", active: true, subcategories: ["Combustivel", "Aplicativo", "Manutencao", "Seguro"] },
+  { id: "fc-transporte", name: "Transporte", type: "despesa", active: true, subcategories: ["Uber", "Posto", "Combustivel", "Aplicativo", "Manutencao", "Seguro"] },
   { id: "fc-saude", name: "Saude", type: "despesa", active: true, subcategories: ["Remedios", "Consultas", "Exames", "Plano de saude"] },
   { id: "fc-educacao", name: "Educacao", type: "despesa", active: true, subcategories: ["Escola", "Cursos", "Material", "Mensalidade"] },
   { id: "fc-lazer", name: "Lazer", type: "despesa", active: true, subcategories: ["Passeios", "Streaming", "Viagens"] },
@@ -339,6 +339,8 @@ function bindEvents() {
   });
 
   els.receiptFileInput.addEventListener("change", handleReceiptImport);
+
+  els.transactionDescription.addEventListener("input", applyTransactionSuggestion);
 
   els.transactionCategory.addEventListener("change", () => {
     renderSubcategoryOptions(els.transactionCategory.value);
@@ -1005,11 +1007,12 @@ function addDaysAt(days, hour, minute) {
 }
 
 function dateOnly(value) {
-  const date = new Date(value);
-  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
-  return date.toISOString().slice(0, 10);
+  const text = String(value || "");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-
 function formatDate(value) {
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
@@ -1743,6 +1746,8 @@ function updateTransactionFieldVisibility() {
     field.classList.toggle("hidden", !showRepeatFields);
   });
 
+  document.querySelectorAll("[data-interval-field]").forEach((field) => field.classList.toggle("hidden", repeat !== "interval"));
+
   const dateField = document.querySelector("#transactionDateField");
   const isPaid = els.transactionStatus.value === "pago";
   if (dateField) dateField.classList.toggle("hidden", !isPaid);
@@ -1751,6 +1756,23 @@ function updateTransactionFieldVisibility() {
   }
 }
 
+function applyTransactionSuggestion() {
+  const term = normalizeText(els.transactionDescription.value).trim();
+  const suggestion = term.includes("uber")
+    ? { categoryId: "fc-transporte", subcategory: "uber", subcategoryName: "Uber" }
+    : ["posto", "gasolina", "combustivel"].some((word) => term.includes(word))
+      ? { categoryId: "fc-transporte", subcategory: "posto", subcategoryName: "Posto" }
+      : null;
+  if (!suggestion) return;
+  els.transactionCategory.value = suggestion.categoryId;
+  const category = getCategory(suggestion.categoryId);
+  if (category && !getSubcategories(suggestion.categoryId).some((item) => normalizeText(item.name) === suggestion.subcategory)) {
+    category.subcategories = [...getSubcategories(suggestion.categoryId), normalizeSubcategory(suggestion.subcategoryName)];
+  }
+  renderSubcategoryOptions(suggestion.categoryId, "");
+  const option = Array.from(els.transactionSubcategory.options).find((item) => normalizeText(item.textContent) === suggestion.subcategory);
+  if (option) els.transactionSubcategory.value = option.value;
+}
 function createAccount(input) {
   const account = normalizeAccount({ id: createId(), ...input, createdAt: new Date().toISOString() });
   state.finance.accounts.push(account);
@@ -2048,14 +2070,14 @@ function addMonthsToDate(value, amount) {
   const target = new Date(year, monthNumber - 1 + amount, 1);
   const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
   target.setDate(Math.min(day, lastDay));
-  return dateOnly(target.toISOString());
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
 }
 
 function addDaysToDate(value, amount) {
   const source = /^\d{4}-\d{2}-\d{2}/.test(String(value)) ? String(value).slice(0, 10) : dateOnly(new Date().toISOString());
   const [year, monthNumber, day] = source.split("-").map(Number);
   const target = new Date(year, monthNumber - 1, day + amount);
-  return dateOnly(target.toISOString());
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
 }
 function formatMonthLabel(month) {
   const [year, monthNumber] = monthKey(month).split("-").map(Number);

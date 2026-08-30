@@ -284,7 +284,7 @@
             <label class="field-label"><span>Repeticao</span><select id="transactionRepeat"><option value="single">Unico</option><option value="fixed">Fixo mensal</option><option value="installment">Parcelado</option><option value="interval">Fixo por periodo</option></select></label>
             <label class="field-label" data-repeat-field><span>Parcela inicial</span><input id="transactionInstallmentStart" type="number" min="1" max="480" value="1" placeholder="1" /></label>
             <label class="field-label" data-repeat-field><span>Total parcelas</span><input id="transactionInstallments" type="number" min="1" max="480" value="1" placeholder="10" /></label>
-            <label class="field-label" data-repeat-field><span>Periodo dias</span><input id="transactionIntervalDays" type="number" min="1" max="365" value="15" placeholder="15" /></label>
+            <label class="field-label" data-repeat-field data-interval-field><span>Periodo dias</span><input id="transactionIntervalDays" type="number" min="1" max="365" value="15" placeholder="15" /></label>
             <label class="field-label wide"><span>Observacao</span><input id="transactionNote" type="text" placeholder="Detalhe opcional" /></label>
             <p class="transaction-assist" id="transactionAssistMessage"></p>
             <button type="submit"><i data-lucide="send"></i>Adicionar</button>
