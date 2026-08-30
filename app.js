@@ -42,7 +42,7 @@ const seedFinance = {
   activeMonth: monthKey(new Date()),
   composerOpen: false,
   editingTransactionId: null,
-  accounts: [{ id: "fa-carteira", name: "Conta Corrente Alexandre", type: "Conta corrente", initialBalance: 710.26, active: true, createdAt: new Date().toISOString() }],
+  accounts: [{ id: "fa-carteira", name: "Conta Corrente Alexandre", type: "Conta corrente", initialBalance: 0, active: true, createdAt: new Date().toISOString() }],
   cards: [],
   categories: FINANCE_CATEGORY_SEEDS,
   transactions: []
@@ -849,7 +849,7 @@ async function loadRemoteState() {
   const response = await requestJson(API_STATE);
   if (!response.ok) return false;
   currentSession = response.session || null;
-  const hadOpeningAccountMigration = response.data?.finance?.migrations?.openingAccountV1 === true;
+  const hadOpeningAccountMigration = response.data?.finance?.migrations?.openingAccountV2 === true;
   state = normalizeState(response.data);
   if (!hadOpeningAccountMigration) saveState();
   await loadMembers();
@@ -914,7 +914,7 @@ function normalizeState(nextState) {
 }
 
 function migrateFinanceOpeningAccount(finance) {
-  if (finance.migrations?.openingAccountV1) return;
+  if (finance.migrations?.openingAccountV2) return;
   const accounts = Array.isArray(finance.accounts) ? finance.accounts : [];
   let account = accounts.find((item) => normalizeText(item.name) === "conta corrente alexandre");
   if (!account) {
@@ -922,7 +922,7 @@ function migrateFinanceOpeningAccount(finance) {
       id: "fa-conta-corrente-alexandre",
       name: "Conta Corrente Alexandre",
       type: "Conta corrente",
-      initialBalance: 710.26,
+      initialBalance: 0,
       active: true,
       createdAt: new Date().toISOString()
     };
@@ -930,14 +930,16 @@ function migrateFinanceOpeningAccount(finance) {
   }
   account.name = "Conta Corrente Alexandre";
   account.type = "Conta corrente";
-  account.initialBalance = 710.26;
+  account.initialBalance = 0;
   account.active = true;
   finance.accounts = accounts;
-  finance.transactions = (Array.isArray(finance.transactions) ? finance.transactions : []).map((transaction) => ({
-    ...transaction,
-    accountId: account.id
-  }));
-  finance.migrations = { ...(finance.migrations || {}), openingAccountV1: true };
+  if (!finance.migrations?.openingAccountV1) {
+    finance.transactions = (Array.isArray(finance.transactions) ? finance.transactions : []).map((transaction) => ({
+      ...transaction,
+      accountId: account.id
+    }));
+  }
+  finance.migrations = { ...(finance.migrations || {}), openingAccountV1: true, openingAccountV2: true };
 }
 
 function normalizeTask(task) {
