@@ -25,8 +25,8 @@ const DEV_STATUSES = [
 ];
 
 const FINANCE_CATEGORY_SEEDS = [
-  { id: "fc-alimentacao", name: "Alimentacao", type: "despesa", active: true, subcategories: ["Mercado", "Restaurante", "Delivery", "Ifood"] },
-  { id: "fc-moradia", name: "Moradia", type: "despesa", active: true, subcategories: ["Luz", "Agua", "Condominio", "Aluguel", "Internet", "Supermercardo"] },
+  { id: "fc-alimentacao", name: "Alimentacao", type: "despesa", active: true, subcategories: ["Mercado", "Restaurante", "Delivery"] },
+  { id: "fc-moradia", name: "Moradia", type: "despesa", active: true, subcategories: ["Luz", "Agua", "Condominio", "Aluguel", "Internet"] },
   { id: "fc-transporte", name: "Transporte", type: "despesa", active: true, subcategories: ["Uber", "Posto", "Combustivel", "Aplicativo", "Manutencao", "Seguro"] },
   { id: "fc-saude", name: "Saude", type: "despesa", active: true, subcategories: ["Remedios", "Consultas", "Exames", "Plano de saude"] },
   { id: "fc-educacao", name: "Educacao", type: "despesa", active: true, subcategories: ["Escola", "Cursos", "Material", "Mensalidade"] },
