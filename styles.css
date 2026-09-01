@@ -478,7 +478,7 @@ dialog input,
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   min-height: 0;
 }
@@ -494,7 +494,7 @@ dialog input,
 
 .task-surface {
   position: relative;
-  overflow: auto;
+  overflow: visible;
   padding: 12px;
 }
 
@@ -621,7 +621,7 @@ dialog input,
 }
 
 .detail-panel {
-  overflow: auto;
+  overflow: visible;
   padding: 16px;
 }
 
@@ -638,7 +638,9 @@ dialog input,
 
 .detail-form {
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 13px;
+  align-items: start;
 }
 
 .detail-form label {
@@ -667,6 +669,79 @@ dialog input,
 .detail-form textarea {
   min-height: 92px;
   resize: vertical;
+}
+
+.detail-form > label:nth-of-type(1),
+.detail-form > label:nth-of-type(2),
+.waiting-section,
+.observations-section,
+.subtasks,
+.links-section {
+  grid-column: 1 / -1;
+}
+
+.waiting-section,
+.observations-section {
+  display: grid;
+  gap: 8px;
+}
+
+.waiting-fields,
+.observation-add {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 8px;
+}
+
+.waiting-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--accent);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.observation-add {
+  grid-template-columns: minmax(0, 1fr) 38px;
+}
+
+.observation-list {
+  display: grid;
+  gap: 8px;
+}
+
+.observation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.observation-row time {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.observation-row p,
+.detail-muted {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  text-transform: none;
+}
+
+.detail-form .danger {
+  grid-column: 1 / -1;
+  justify-self: end;
+  min-width: 180px;
 }
 
 .subtasks {
@@ -807,7 +882,8 @@ svg {
   }
 
   .composer form,
-  .board-view {
+  .board-view,
+  .detail-form {
     grid-template-columns: 1fr;
   }
 }
@@ -955,6 +1031,8 @@ svg {
 
 @media (max-width: 760px) {
   .date-panel,
+  .waiting-fields,
+  .observation-add,
   .link-add {
     grid-template-columns: 1fr;
     align-items: stretch;

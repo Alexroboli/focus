@@ -78,6 +78,8 @@ const seedState = {
       due: todayAt(18, 0),
       labels: ["planejamento"],
       links: [],
+      observations: [],
+      waitingFor: { name: "", url: "" },
       completedAt: null,
       createdAt: new Date().toISOString(),
       subtasks: [
@@ -96,6 +98,8 @@ const seedState = {
       due: todayAt(15, 0),
       labels: ["dev", "focus"],
       links: [{ id: "l1", title: "ClickUp", url: "https://app.clickup.com/" }],
+      observations: [],
+      waitingFor: { name: "", url: "" },
       completedAt: null,
       createdAt: new Date().toISOString(),
       subtasks: [{ id: "s3", title: "Criar filtro por data", done: false }]
@@ -620,6 +624,8 @@ function renderTaskCard(task) {
   const subtaskCount = task.subtasks.filter((subtask) => subtask.done).length;
   const labels = task.labels.map((label) => `<span class="pill">#${escapeHtml(label)}</span>`).join("");
   const links = task.links.length ? `<span class="pill"><i data-lucide="link"></i>${task.links.length}</span>` : "";
+  const waiting = task.waitingFor?.name ? `<span class="pill"><i data-lucide="message-circle"></i>${escapeHtml(task.waitingFor.name)}</span>` : "";
+  const notes = task.observations.length ? `<span class="pill"><i data-lucide="notebook-tabs"></i>${task.observations.length}</span>` : "";
 
   return `
     <article class="task-card ${selected} ${completed}" data-task-id="${task.id}">
@@ -636,6 +642,8 @@ function renderTaskCard(task) {
           <span class="pill"><i data-lucide="activity"></i>${getStatusLabel(task)}</span>
           <span class="pill"><i data-lucide="list-checks"></i>${subtaskCount}/${task.subtasks.length}</span>
           ${links}
+          ${waiting}
+          ${notes}
           ${labels}
         </div>
       </div>
@@ -680,9 +688,15 @@ function renderDetails() {
   const task = getTask(state.selectedTaskId);
   if (!task) {
     els.detailPanel.innerHTML = `<div class="detail-empty"><i data-lucide="mouse-pointer-2"></i><strong>Selecione uma tarefa</strong><span>Detalhes, subtarefas e links aparecem aqui.</span></div>`;
+    positionDetailPanel();
     queueIconRefresh();
     return;
   }
+
+  const observations = [...task.observations]
+    .sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime());
+  const waitingName = task.waitingFor?.name || "";
+  const waitingUrl = task.waitingFor?.url || "";
 
   els.detailPanel.innerHTML = `
     <form class="detail-form" id="detailForm">
@@ -701,6 +715,24 @@ function renderDetails() {
       <label>Status<select name="status">${getStatusOptions(task).map((status) => `<option value="${status.value}" ${task.status === status.value ? "selected" : ""}>${status.label}</option>`).join("")}</select></label>
       <label>Prazo<input name="due" type="datetime-local" value="${task.due ? toDatetimeLocal(task.due) : ""}" /></label>
       <label>Etiquetas<input name="labels" value="${escapeAttr(task.labels.join(", "))}" placeholder="cliente, urgente" /></label>
+      <div class="waiting-section">
+        <div class="section-title"><span>Aguardando resposta</span></div>
+        <div class="waiting-fields">
+          <label>Nome<input name="waitingName" value="${escapeAttr(waitingName)}" placeholder="Nome da pessoa" /></label>
+          <label>Link<input name="waitingUrl" type="url" value="${escapeAttr(waitingUrl)}" placeholder="Slack, email ou URL" /></label>
+        </div>
+        ${waitingUrl ? `<a class="waiting-link" href="${escapeAttr(normalizeUrl(waitingUrl))}" target="_blank" rel="noreferrer"><i data-lucide="external-link"></i> Abrir contato</a>` : ""}
+      </div>
+      <div class="observations-section">
+        <div class="section-title"><span>Observacoes</span></div>
+        <div class="observation-add">
+          <textarea id="observationText" placeholder="Nova observacao"></textarea>
+          <button class="icon-button" id="addObservationBtn" type="button" aria-label="Adicionar observacao"><i data-lucide="plus"></i></button>
+        </div>
+        <div class="observation-list">
+          ${observations.length ? observations.map((observation) => `<div class="observation-row" data-observation-id="${escapeAttr(observation.id)}"><div><time>${formatDateTime(observation.at)}</time><p>${escapeHtml(observation.text)}</p></div><button class="icon-button" type="button" data-action="observation-delete" aria-label="Remover observacao"><i data-lucide="trash-2"></i></button></div>`).join("") : '<p class="detail-muted">Nenhuma observacao registrada.</p>'}
+        </div>
+      </div>
       <div class="subtasks">
         <div class="section-title"><span>Subtarefas</span></div>
         ${task.subtasks.map((subtask) => `<div class="subtask-row ${subtask.done ? "done" : ""}" data-subtask-id="${subtask.id}"><input type="checkbox" ${subtask.done ? "checked" : ""} data-action="subtask-toggle" aria-label="Concluir subtarefa" /><span>${escapeHtml(subtask.title)}</span><button class="icon-button" type="button" data-action="subtask-delete" aria-label="Remover subtarefa"><i data-lucide="trash-2"></i></button></div>`).join("")}
@@ -728,7 +760,11 @@ function renderDetails() {
       niche: nextNiche,
       status: validStatus ? formData.get("status") : nextNiche === "dev" ? "analise" : "pendente",
       due: formData.get("due") ? new Date(formData.get("due")).toISOString() : null,
-      labels: formData.get("labels").split(",").map((label) => label.trim()).filter(Boolean)
+      labels: formData.get("labels").split(",").map((label) => label.trim()).filter(Boolean),
+      waitingFor: {
+        name: formData.get("waitingName").trim(),
+        url: formData.get("waitingUrl").trim()
+      }
     }, false);
   });
 
@@ -742,6 +778,16 @@ function renderDetails() {
     logActivity(`Subtarefa adicionada em "${task.title}"`);
     saveAndRender();
   });
+  form.querySelector("#addObservationBtn").addEventListener("click", () => {
+    const input = form.querySelector("#observationText");
+    const text = input.value.trim();
+    if (!text) return;
+    task.observations.unshift({ id: createId(), text, at: new Date().toISOString() });
+    input.value = "";
+    logActivity(`Observacao adicionada em "${task.title}"`);
+    saveAndRender();
+  });
+
   form.querySelector("#addLinkBtn").addEventListener("click", () => {
     const titleInput = form.querySelector("#linkTitle");
     const urlInput = form.querySelector("#linkUrl");
@@ -780,7 +826,24 @@ function renderDetails() {
       saveAndRender();
     });
   });
+  form.querySelectorAll("[data-action='observation-delete']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.closest("[data-observation-id]").dataset.observationId;
+      task.observations = task.observations.filter((observation) => observation.id !== id);
+      saveAndRender();
+    });
+  });
+  positionDetailPanel();
   queueIconRefresh();
+}
+
+function positionDetailPanel() {
+  const selectedCard = Array.from(document.querySelectorAll(".task-card")).find((card) => card.dataset.taskId === state.selectedTaskId);
+  if (selectedCard && state.view !== "board") {
+    selectedCard.insertAdjacentElement("afterend", els.detailPanel);
+    return;
+  }
+  document.querySelector(".content-grid")?.appendChild(els.detailPanel);
 }
 
 function getFilteredTasks() {
@@ -795,7 +858,9 @@ function getFilteredTasks() {
       if (!query) return true;
       const project = getProject(task.projectId)?.name || "";
       const linkText = task.links.map((link) => `${link.title} ${link.url}`).join(" ");
-      return [task.title, task.description, project, task.labels.join(" "), linkText].join(" ").toLowerCase().includes(query);
+      const observationText = task.observations.map((observation) => observation.text).join(" ");
+      const waitingText = [task.waitingFor?.name, task.waitingFor?.url].filter(Boolean).join(" ");
+      return [task.title, task.description, project, task.labels.join(" "), linkText, observationText, waitingText].join(" ").toLowerCase().includes(query);
     })
     .sort(compareTasks);
 }
@@ -836,6 +901,8 @@ function updateTask(id, patch, rerenderDetails = true) {
   Object.assign(task, patch);
   task.links = Array.isArray(task.links) ? task.links : [];
   task.subtasks = Array.isArray(task.subtasks) ? task.subtasks : [];
+  task.observations = Array.isArray(task.observations) ? task.observations : [];
+  task.waitingFor = normalizeWaitingFor(task.waitingFor);
   if (patch.status) logActivity(`Status de "${task.title}" alterado para ${getStatusLabel(task)}`);
   saveState();
   renderProjects();
@@ -954,7 +1021,28 @@ function normalizeTask(task) {
     priority: task.priority || "media",
     labels: Array.isArray(task.labels) ? task.labels : [],
     links: Array.isArray(task.links) ? task.links : [],
+    observations: Array.isArray(task.observations) ? task.observations.map(normalizeObservation).filter(Boolean) : [],
+    waitingFor: normalizeWaitingFor(task.waitingFor),
     subtasks: Array.isArray(task.subtasks) ? task.subtasks : []
+  };
+}
+
+function normalizeObservation(observation) {
+  if (!observation) return null;
+  const text = String(observation.text || "").trim();
+  if (!text) return null;
+  return {
+    id: observation.id || createId(),
+    text,
+    at: observation.at || new Date().toISOString()
+  };
+}
+
+function normalizeWaitingFor(waitingFor) {
+  if (!waitingFor || typeof waitingFor !== "object") return { name: "", url: "" };
+  return {
+    name: String(waitingFor.name || "").trim(),
+    url: String(waitingFor.url || "").trim()
   };
 }
 
@@ -1050,6 +1138,19 @@ function dateOnly(value) {
   if (Number.isNaN(date.getTime())) return "";
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
+function formatDateTime(value) {
+  if (!value) return "Agora";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Agora";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 function formatDate(value) {
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
