@@ -190,10 +190,12 @@ const els = {
   countTransactions: document.querySelector("#countTransactions"),
   countAccounts: document.querySelector("#countAccounts"),
   countCards: document.querySelector("#countCards"),
-  countCategories: document.querySelector("#countCategories")
+  countCategories: document.querySelector("#countCategories"),
+  themeToggleButtons: document.querySelectorAll("[data-theme-toggle]")
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+  applyTheme(localStorage.getItem("focus-theme") || "light");
   bindAuth();
   bindEvents();
   boot();
@@ -316,6 +318,12 @@ function showAuthMessage(message) {
 window.setAuthMode = setAuthMode;
 
 function bindEvents() {
+  els.themeToggleButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    });
+  });
+
   els.quickAddBtn.addEventListener("click", () => els.taskTitle.focus());
 
   els.moduleButtons.forEach((button) => {
@@ -765,7 +773,7 @@ function renderDetails() {
         name: formData.get("waitingName").trim(),
         url: formData.get("waitingUrl").trim()
       }
-    }, false);
+    }, false, false);
   });
 
   form.querySelector("[name='niche']").addEventListener("change", () => saveAndRender());
@@ -846,6 +854,20 @@ function positionDetailPanel() {
   document.querySelector(".content-grid")?.appendChild(els.detailPanel);
 }
 
+function applyTheme(theme) {
+  const isDark = theme === "dark";
+  document.documentElement.dataset.theme = isDark ? "dark" : "light";
+  document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    button.setAttribute("aria-label", isDark ? "Ativar modo claro" : "Ativar modo escuro");
+    button.title = isDark ? "Ativar modo claro" : "Ativar modo escuro";
+    const icon = button.querySelector("i");
+    if (icon) icon.setAttribute("data-lucide", isDark ? "sun" : "moon");
+  });
+  localStorage.setItem("focus-theme", isDark ? "dark" : "light");
+  queueIconRefresh();
+}
+
 function getFilteredTasks() {
   const query = els.searchInput.value.trim().toLowerCase();
   return state.tasks
@@ -896,7 +918,7 @@ function compareTasks(a, b) {
   return dueA - dueB || priorityWeight[a.priority] - priorityWeight[b.priority];
 }
 
-function updateTask(id, patch, rerenderDetails = true) {
+function updateTask(id, patch, rerenderDetails = true, rerenderTasks = true) {
   const task = getTask(id);
   Object.assign(task, patch);
   task.links = Array.isArray(task.links) ? task.links : [];
@@ -908,7 +930,7 @@ function updateTask(id, patch, rerenderDetails = true) {
   renderProjects();
   renderCounts();
   renderControls();
-  renderTasks();
+  if (rerenderTasks) renderTasks();
   if (rerenderDetails) renderDetails();
 }
 
