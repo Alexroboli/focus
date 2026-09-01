@@ -666,7 +666,7 @@ function bindTaskCards(root) {
   root.querySelectorAll(".task-card").forEach((card) => {
     card.addEventListener("click", (event) => {
       if (event.target.closest("[data-action]")) return;
-      state.selectedTaskId = card.dataset.taskId;
+      state.selectedTaskId = state.selectedTaskId === card.dataset.taskId ? null : card.dataset.taskId;
       saveAndRender();
     });
   });
