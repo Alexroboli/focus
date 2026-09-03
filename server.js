@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const PDFDocument = require("pdfkit");
 const { URL } = require("url");
 const {
   hasUsers,
@@ -50,6 +51,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/invites" && req.method === "POST") return handleCreateInvite(req, res);
     if (url.pathname === "/api/state" && req.method === "GET") return handleGetState(req, res);
     if (url.pathname === "/api/state" && req.method === "PUT") return handlePutState(req, res);
+    if (url.pathname === "/api/reports/finance.pdf" && req.method === "GET") return handleFinanceReport(req, res, url);
     if (url.pathname.startsWith("/api/")) return sendJson(res, 404, { message: "Rota nao encontrada." });
 
     return serveStatic(url.pathname, res);
@@ -158,6 +160,87 @@ async function handlePutState(req, res) {
   const state = await readJsonBody(req);
   await writeTenantState(session, state);
   return sendJson(res, 200, { ok: true });
+}
+
+async function handleFinanceReport(req, res, url) {
+  const session = getSession(req);
+  if (!session) return sendJson(res, 401, { message: "Nao autenticado." });
+  const month = /^\d{4}-\d{2}$/.test(url.searchParams.get("month")) ? url.searchParams.get("month") : monthKey(new Date());
+  const state = await readTenantState(session, seedState) || {};
+  const finance = state.finance || {};
+  const accounts = new Map((finance.accounts || []).map((item) => [item.id, item.name || "Conta"]));
+  const categories = new Map((finance.categories || []).map((item) => [item.id, item]));
+  const transactions = (finance.transactions || [])
+    .filter((item) => (item.competenceMonth || String(item.dueDate || item.date || "").slice(0, 7)) === month)
+    .sort((left, right) => String(left.dueDate || left.date).localeCompare(String(right.dueDate || right.date)));
+  const paid = transactions.filter((item) => item.status === "pago");
+  const pending = transactions.filter((item) => item.status !== "pago");
+  const sum = (items) => items.reduce((total, item) => total + Number(item.amount || item.value || 0), 0);
+  const signedSum = (items) => items.reduce((total, item) => total + (item.type === "receita" ? 1 : -1) * Number(item.amount || item.value || 0), 0);
+  const doc = new PDFDocument({ size: "A4", margin: 42, bufferPages: true });
+  const filename = `prestacao-de-contas-${month}.pdf`;
+  res.writeHead(200, {
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `attachment; filename="${filename}"`,
+    "Cache-Control": "no-store"
+  });
+  doc.pipe(res);
+  doc.fontSize(20).fillColor("#15352b").text("Prestacao de contas", { continued: false });
+  doc.fontSize(11).fillColor("#5e6f67").text(`Competencia: ${formatMonthLabel(month)} | Gerado em ${formatDate(new Date())}`);
+  doc.moveDown(1);
+  writeReportSection(doc, "Lancamentos pagos", paid, accounts, categories);
+  doc.fontSize(11).fillColor("#1b7f59").text(`Subtotal pago: ${formatCurrency(sum(paid))}`);
+  doc.moveDown(1);
+  writeReportSection(doc, "Lancamentos pendentes", pending, accounts, categories);
+  doc.fontSize(11).fillColor("#b23b32").text(`Subtotal a pagar: ${formatCurrency(sum(pending))}`);
+  doc.moveDown(1);
+  doc.fontSize(13).fillColor("#15352b").text("Resumo financeiro");
+  doc.fontSize(11).fillColor("#26342e").text(`Total de lancamentos: ${transactions.length}`);
+  doc.text(`Total pago: ${formatCurrency(sum(paid))}`);
+  doc.text(`Total a pagar: ${formatCurrency(sum(pending))}`);
+  doc.text(`Saldo liquido dos lancamentos: ${formatCurrency(signedSum(transactions))}`);
+  doc.end();
+}
+
+function writeReportSection(doc, title, transactions, accounts, categories) {
+  doc.fontSize(13).fillColor("#15352b").text(title);
+  if (!transactions.length) {
+    doc.fontSize(10).fillColor("#5e6f67").text("Nenhum lancamento.");
+    return;
+  }
+  transactions.forEach((item) => {
+    if (doc.y > 730) doc.addPage();
+    const category = categories.get(item.categoryId);
+    const subcategory = (category?.subcategories || []).find((entry) => (entry.id || entry) === (item.subcategoryId || item.subcategory));
+    const categoryLabel = subcategory ? `${category?.name || "Sem categoria"} / ${subcategory.name || subcategory}` : category?.name || "Sem categoria";
+    const amount = formatCurrency(Number(item.amount || item.value || 0));
+    const due = formatDate(item.dueDate || item.date);
+    const paidAt = item.status === "pago" ? formatDate(item.paidAt || item.date) : "-";
+    doc.moveDown(0.35).fontSize(10).fillColor("#26342e").text(`${item.description || "Lancamento"}  |  ${item.type === "receita" ? "Receita" : "Despesa"}  |  ${amount}`);
+    doc.fontSize(9).fillColor("#5e6f67").text(`Vencimento: ${due} | Pagamento: ${paidAt} | Conta: ${accounts.get(item.accountId) || "-"}`);
+    doc.text(`Categoria: ${categoryLabel}${item.note ? ` | Obs.: ${item.note}` : ""}`);
+    doc.moveTo(42, doc.y + 4).lineTo(553, doc.y + 4).strokeColor("#d8e1dc").stroke();
+  });
+}
+
+function formatCurrency(value) {
+  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const date = new Date(`${String(value).slice(0, 10)}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("pt-BR");
+}
+
+function formatMonthLabel(value) {
+  const date = new Date(`${value}-01T12:00:00`);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+}
+
+function monthKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function serveStatic(requestPath, res) {

@@ -1507,6 +1507,7 @@ function renderMonthControls(summary) {
       <button class="icon-button" type="button" data-finance-action="month-next" aria-label="Proximo mes"><i data-lucide="chevron-right"></i></button>
       <input type="month" value="${summary.selectedMonth}" data-finance-action="month-pick" aria-label="Escolher mes" />
       <button class="secondary-action" type="button" data-finance-action="month-current"><i data-lucide="calendar-days"></i>Mes atual</button>
+      <button class="secondary-action" type="button" data-finance-action="download-report"><i data-lucide="file-down"></i>Prestacao de contas</button>
     </section>`;
 }
 
@@ -2129,7 +2130,16 @@ function renderTransactionRows(transactions) {
       <span>${selectedIds.size ? `${selectedIds.size} selecionado(s)` : "Selecione lancamentos para agir em grupo"}</span>
       <button class="secondary-action" type="button" data-finance-action="bulk-delete-transaction" ${selectedIds.size ? "" : "disabled"}><i data-lucide="trash-2"></i>Excluir selecionados</button>
     </div>` : "";
-  return `${bulkBar}<div class="finance-list">${transactions.map((item) => {
+  const groups = new Map();
+  transactions.forEach((item) => {
+    const key = item.dueDate || item.date || "sem-data";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  });
+  const groupedRows = Array.from(groups, ([date, items]) => `
+    <section class="finance-day-group">
+      <h3><i data-lucide="calendar-days"></i>${formatFinanceDayLabel(date)}<span>${items.length} lancamento(s)</span></h3>
+      <div class="finance-list">${items.map((item) => {
     const category = getCategory(item.categoryId);
     const repeatLabel = item.repeat === "installment" ? `Parcela ${item.installmentNumber}/${item.installmentTotal}` : item.repeat === "fixed" ? "Fixo mensal" : item.repeat === "interval" ? `A cada ${item.intervalDays || 15} dias` : "Unico";
     const subcategoryName = getSubcategoryName(item);
@@ -2150,7 +2160,9 @@ function renderTransactionRows(transactions) {
           <button class="status-mini ${item.status}" type="button" data-finance-action="toggle-transaction" data-id="${item.id}">${item.status === "pago" ? "Pago" : "Pendente"}</button>
         </div>
       </div>`;
-  }).join("")}</div>`;
+      }).join("")}</div>
+    </section>`).join("");
+  return `${bulkBar}${groupedRows}`;
 }
 
 function bindFinanceActions() {
@@ -2200,6 +2212,10 @@ function bindFinanceActions() {
     button.addEventListener("click", async () => {
       const action = button.dataset.financeAction;
       const id = button.dataset.id;
+      if (action === "download-report") {
+        await downloadFinanceReport();
+        return;
+      }
       if (action === "month-prev") {
         state.finance.activeMonth = addMonths(state.finance.activeMonth, -1);
       }
@@ -2263,6 +2279,22 @@ function bindFinanceActions() {
   });
 }
 
+async function downloadFinanceReport() {
+  const month = state.finance.activeMonth || monthKey(new Date());
+  const response = await fetch(`/api/reports/finance.pdf?month=${encodeURIComponent(month)}`);
+  if (!response.ok) {
+    setTransactionAssistMessage("Nao foi possivel gerar a prestacao de contas.");
+    return;
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `prestacao-de-contas-${month}.pdf`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function transactionsAreAllSelected() {
   const visibleIds = getFilteredTransactions().map((item) => item.id);
   return visibleIds.length > 0 && visibleIds.every((id) => (state.finance.selectedTransactionIds || []).includes(id));
@@ -2305,6 +2337,12 @@ function monthKey(value) {
   if (/^\d{4}-\d{2}$/.test(text)) return text;
   if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 7);
   return monthKey(new Date());
+}
+
+function formatFinanceDayLabel(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return "Sem data";
+  const date = new Date(`${value}T12:00:00`);
+  return new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(date);
 }
 
 function firstDayOfMonth(month) {
