@@ -13,6 +13,7 @@ const {
   resetPasswordWithRecovery,
   listMembers,
   readTenantState,
+  readTenantStateRecord,
   writeTenantState
 } = require("./database");
 
@@ -150,16 +151,23 @@ async function handleCreateInvite(req, res) {
 async function handleGetState(req, res) {
   const session = getSession(req);
   if (!session) return sendJson(res, 401, { message: "Nao autenticado." });
-  const data = await readTenantState(session, seedState);
-  return sendJson(res, 200, { ok: true, data, session });
+  const result = await readTenantStateRecord(session, seedState);
+  return sendJson(res, 200, { ok: true, data: result.state, stateVersion: result.updatedAt, session });
 }
 
 async function handlePutState(req, res) {
   const session = getSession(req);
   if (!session) return sendJson(res, 401, { message: "Nao autenticado." });
+  const expectedVersion = String(req.headers["if-match"] || "");
+  if (expectedVersion) {
+    const current = await readTenantStateRecord(session, seedState);
+    if (current.updatedAt !== expectedVersion) {
+      return sendJson(res, 409, { message: "O estado foi alterado em outro dispositivo.", data: current.state, stateVersion: current.updatedAt });
+    }
+  }
   const state = await readJsonBody(req);
-  await writeTenantState(session, state);
-  return sendJson(res, 200, { ok: true });
+  const stateVersion = await writeTenantState(session, state);
+  return sendJson(res, 200, { ok: true, stateVersion });
 }
 
 async function handleFinanceReport(req, res, url) {

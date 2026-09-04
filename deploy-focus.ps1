@@ -49,6 +49,12 @@ function Backup-Database {
     }
 }
 
+function Stop-Focus {
+    Write-Step "Parando Focus antes do backup..."
+    Set-Location $appPath
+    pm2 stop $processName
+}
+
 function Update-Code {
     Write-Step "Atualizando codigo do GitHub..."
     Set-Location $appPath
@@ -98,6 +104,7 @@ if (-not (Test-Path -LiteralPath $appPath)) {
     throw "Pasta do Focus nao encontrada: $appPath"
 }
 
+Stop-Focus
 Backup-Database
 Update-Code
 Install-Dependencies

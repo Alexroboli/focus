@@ -224,14 +224,19 @@ async function listMembers(session) {
 }
 
 async function readTenantState(session, fallbackState) {
+  const result = await readTenantStateRecord(session, fallbackState);
+  return result.state;
+}
+
+async function readTenantStateRecord(session, fallbackState) {
   const db = await getDb();
-  let row = await db.get("SELECT state_json AS stateJson FROM tenant_state WHERE tenant_id = ?", session.tenantId);
+  let row = await db.get("SELECT state_json AS stateJson, updated_at AS updatedAt FROM tenant_state WHERE tenant_id = ?", session.tenantId);
   if (!row) {
     await writeTenantState(session, fallbackState);
-    row = await db.get("SELECT state_json AS stateJson FROM tenant_state WHERE tenant_id = ?", session.tenantId);
+    row = await db.get("SELECT state_json AS stateJson, updated_at AS updatedAt FROM tenant_state WHERE tenant_id = ?", session.tenantId);
   }
   const parsed = JSON.parse(row.stateJson);
-  return parsed || fallbackState;
+  return { state: parsed || fallbackState, updatedAt: row.updatedAt || "" };
 }
 
 async function writeTenantState(session, state) {
@@ -242,6 +247,7 @@ async function writeTenantState(session, state) {
     VALUES (?, ?, ?, ?)
     ON CONFLICT(tenant_id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at, updated_by = excluded.updated_by
   `, session.tenantId, JSON.stringify(state), now, session.userId);
+  return now;
 }
 
 async function ensureOwner(session) {
@@ -274,5 +280,6 @@ module.exports = {
   resetPasswordWithRecovery,
   listMembers,
   readTenantState,
+  readTenantStateRecord,
   writeTenantState
 };

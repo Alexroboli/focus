@@ -110,6 +110,8 @@ const seedState = {
 
 let state = structuredClone(seedState);
 let saveTimer = null;
+let stateVersion = null;
+let baseRemoteState = structuredClone(seedState);
 
 const els = {
   authScreen: document.querySelector("#authScreen"),
@@ -940,6 +942,8 @@ async function loadRemoteState() {
   currentSession = response.session || null;
   const hadOpeningAccountMigration = response.data?.finance?.migrations?.openingAccountV2 === true;
   state = normalizeState(response.data);
+  stateVersion = response.stateVersion || null;
+  baseRemoteState = structuredClone(state);
   if (!hadOpeningAccountMigration) saveState();
   await loadMembers();
   return true;
@@ -953,12 +957,67 @@ async function loadMembers() {
 function saveState() {
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(async () => {
+    const localSnapshot = structuredClone(state);
     const response = await requestJson(API_STATE, {
       method: "PUT",
-      body: JSON.stringify(state)
+      headers: stateVersion ? { "If-Match": stateVersion } : {},
+      body: JSON.stringify(localSnapshot)
     });
+    if (response.ok) {
+      stateVersion = response.stateVersion || stateVersion;
+      baseRemoteState = structuredClone(localSnapshot);
+    } else if (response.status === 409 && response.data) {
+      state = mergeConcurrentStates(baseRemoteState, localSnapshot, normalizeState(response.data));
+      stateVersion = response.stateVersion || stateVersion;
+      baseRemoteState = structuredClone(state);
+      saveState();
+    }
     if (!response.ok && response.status === 401) refreshAuthState(false);
   }, 250);
+}
+
+function mergeConcurrentStates(base, local, remote) {
+  if (JSON.stringify(local) === JSON.stringify(base)) return remote;
+  if (JSON.stringify(remote) === JSON.stringify(base)) return local;
+  const merged = { ...remote };
+  Object.keys({ ...base, ...local, ...remote }).forEach((key) => {
+    if (key === "tasks" || key === "projects" || key === "activity" || key === "finance") return;
+    const localChanged = JSON.stringify(local[key]) !== JSON.stringify(base[key]);
+    if (localChanged) merged[key] = local[key];
+  });
+  merged.projects = mergeEntityArray(base.projects, local.projects, remote.projects);
+  merged.tasks = mergeEntityArray(base.tasks, local.tasks, remote.tasks);
+  merged.activity = mergeEntityArray(base.activity, local.activity, remote.activity);
+  merged.finance = mergeFinanceState(base.finance, local.finance, remote.finance);
+  return normalizeState(merged);
+}
+
+function mergeFinanceState(base, local, remote) {
+  const merged = { ...remote };
+  ["accounts", "cards", "categories", "transactions"].forEach((key) => {
+    merged[key] = mergeEntityArray(base?.[key], local?.[key], remote?.[key]);
+  });
+  Object.keys({ ...base, ...local, ...remote }).forEach((key) => {
+    if (["accounts", "cards", "categories", "transactions"].includes(key)) return;
+    if (JSON.stringify(local?.[key]) !== JSON.stringify(base?.[key])) merged[key] = local?.[key];
+  });
+  return merged;
+}
+
+function mergeEntityArray(baseItems = [], localItems = [], remoteItems = []) {
+  const baseMap = new Map((baseItems || []).map((item) => [item.id, item]));
+  const localMap = new Map((localItems || []).map((item) => [item.id, item]));
+  const remoteMap = new Map((remoteItems || []).map((item) => [item.id, item]));
+  const ids = new Set([...baseMap.keys(), ...localMap.keys(), ...remoteMap.keys()]);
+  return Array.from(ids).map((id) => {
+    const baseItem = baseMap.get(id);
+    const localItem = localMap.get(id);
+    const remoteItem = remoteMap.get(id);
+    if (!baseItem) return localItem || remoteItem;
+    if (!localItem) return JSON.stringify(remoteItem) !== JSON.stringify(baseItem) ? remoteItem : undefined;
+    if (!remoteItem) return JSON.stringify(localItem) !== JSON.stringify(baseItem) ? localItem : undefined;
+    return mergeConcurrentStates(baseItem, localItem, remoteItem);
+  }).filter(Boolean);
 }
 
 function saveAndRender() {
